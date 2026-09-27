@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Installer: .NET Framework 4.8 is part of Windows 10 (1903+) and Windows 11, so the setup runs on a clean
+    offline machine. The self-contained application is embedded as payload.zip (produced by build.ps1).
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>PassKeeper-Setup</AssemblyName>
+    <RootNamespace>PassKeeper.Setup</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>..\PassKeeper\Assets\PassKeeper.ico</ApplicationIcon>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    <SatelliteResourceLanguages>none</SatelliteResourceLanguages>
+    <PayloadZip Condition="'$(PayloadZip)' == ''">$(MSBuildThisFileDirectory)..\..\artifacts\payload.zip</PayloadZip>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.IO.Compression.FileSystem" />
+    <Reference Include="System.Windows.Forms" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Shared\InstallLayout.cs" Link="Shared\InstallLayout.cs" />
+    <Resource Include="..\PassKeeper\Assets\PassKeeper.ico" Link="Assets\PassKeeper.ico" />
+    <EmbeddedResource Include="$(PayloadZip)" LogicalName="payload.zip" Condition="Exists('$(PayloadZip)')" />
+  </ItemGroup>
+
+</Project>

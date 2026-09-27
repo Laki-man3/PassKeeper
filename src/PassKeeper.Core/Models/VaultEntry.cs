@@ -1,0 +1,82 @@
+using System.Text.Json;
+
+namespace PassKeeper.Core.Models;
+
+public sealed class VaultEntry
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public string Title { get; set; } = "";
+    public string Username { get; set; } = "";
+    public string Password { get; set; } = "";
+    public string Url { get; set; } = "";
+    public List<string> ExtraUrls { get; set; } = [];
+    public string Email { get; set; } = "";
+    public string Phone { get; set; } = "";
+    /// <summary>API key, licence key, token or any other secret key.</summary>
+    public string SecretKey { get; set; } = "";
+    /// <summary>otpauth:// URI or Base32 TOTP secret.</summary>
+    public string Totp { get; set; } = "";
+    public string Notes { get; set; } = "";
+    /// <summary>Folder path, segments separated by '/'.</summary>
+    public string Folder { get; set; } = "";
+    public List<string> Tags { get; set; } = [];
+    public bool Favorite { get; set; }
+    /// <summary>Custom auto-type sequence; empty means the default one.</summary>
+    public string AutoTypeSequence { get; set; } = "";
+    /// <summary>Window title / process name wildcard patterns for desktop applications.</summary>
+    public List<string> WindowPatterns { get; set; } = [];
+    public List<CustomField> CustomFields { get; set; } = [];
+    public List<PasswordHistoryItem> PasswordHistory { get; set; } = [];
+    public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
+    public DateTime ModifiedUtc { get; set; } = DateTime.UtcNow;
+    public DateTime? LastUsedUtc { get; set; }
+    /// <summary>Set when the entry is in the trash.</summary>
+    public DateTime? DeletedUtc { get; set; }
+
+    public bool IsDeleted => DeletedUtc.HasValue;
+
+    public IEnumerable<string> AllUrls()
+    {
+        if (!string.IsNullOrWhiteSpace(Url)) yield return Url;
+        foreach (var u in ExtraUrls)
+            if (!string.IsNullOrWhiteSpace(u)) yield return u;
+    }
+
+    public VaultEntry Clone()
+    {
+        var json = JsonSerializer.Serialize(this, VaultJson.Options);
+        return JsonSerializer.Deserialize<VaultEntry>(json, VaultJson.Options)!;
+    }
+
+    /// <summary>Updates the password keeping the previous one in the history.</summary>
+    public void SetPassword(string newPassword, int historyLimit = 10)
+    {
+        if (newPassword == Password) return;
+        if (!string.IsNullOrEmpty(Password))
+        {
+            PasswordHistory.Insert(0, new PasswordHistoryItem { Password = Password, ChangedUtc = DateTime.UtcNow });
+            if (PasswordHistory.Count > historyLimit)
+                PasswordHistory.RemoveRange(historyLimit, PasswordHistory.Count - historyLimit);
+        }
+        Password = newPassword;
+    }
+}
+
+public sealed class CustomField
+{
+    public string Name { get; set; } = "";
+    public string Value { get; set; } = "";
+    public bool Protected { get; set; }
+}
+
+public sealed class PasswordHistoryItem
+{
+    public string Password { get; set; } = "";
+    public DateTime ChangedUtc { get; set; }
+}
+
+public sealed class VaultData
+{
+    public int Version { get; set; } = 1;
+    public List<VaultEntry> Entries { get; set; } = [];
+}

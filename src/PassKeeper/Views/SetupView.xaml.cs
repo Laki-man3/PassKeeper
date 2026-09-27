@@ -1,0 +1,74 @@
+using System.Windows;
+using System.Windows.Controls;
+using PassKeeper.Core.Storage;
+using PassKeeper.Localization;
+using PassKeeper.Services;
+
+namespace PassKeeper.Views;
+
+public partial class SetupView : UserControl
+{
+    private bool _busy;
+
+    public SetupView()
+    {
+        InitializeComponent();
+        UserName.Text = Environment.UserName;
+        (Loc.I.IsRussian ? LangRu : LangEn).IsChecked = true;
+        Master.EnterPressed += (_, _) => Confirm.FocusInput();
+        Confirm.EnterPressed += (_, _) => Create_Click(this, new RoutedEventArgs());
+        Loaded += (_, _) => Master.FocusInput();
+    }
+
+    private void Lang_Checked(object sender, RoutedEventArgs e)
+    {
+        var lang = sender == LangEn ? "en" : "ru";
+        Loc.I.Language = lang;
+        App.Instance.Settings.Language = lang;
+        App.Instance.Settings.Save();
+    }
+
+    private async void Create_Click(object sender, RoutedEventArgs e)
+    {
+        if (_busy) return;
+        var name = UserName.Text.Trim();
+        var master = Master.Value;
+        string? error = null;
+        if (name.Length == 0) error = Loc.T("Setup.ErrName");
+        else if (master.Length < VaultService.MinMasterPasswordLength) error = Loc.F("Setup.ErrShort", VaultService.MinMasterPasswordLength);
+        else if (master != Confirm.Value) error = Loc.T("Setup.ErrMismatch");
+        ShowError(error);
+        if (error != null) return;
+
+        SetBusy(true);
+        try
+        {
+            var vault = App.Instance.Vault;
+            await Task.Run(() => vault.Create(name, master));
+            if (Autostart.IsChecked == true)
+            {
+                try { AutostartService.SetForUser(true); }
+                catch (Exception) { /* policy may forbid it; the setting can be changed later */ }
+            }
+            // Vault.StateChanged makes the app continue with the mandatory PIN setup.
+        }
+        catch (Exception ex)
+        {
+            ShowError(Loc.F("Common.ErrorFormat", ex.Message));
+            SetBusy(false);
+        }
+    }
+
+    private void SetBusy(bool busy)
+    {
+        _busy = busy;
+        Busy.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
+        CreateButton.IsEnabled = !busy;
+    }
+
+    private void ShowError(string? text)
+    {
+        Error.Text = text ?? "";
+        Error.Visibility = text == null ? Visibility.Collapsed : Visibility.Visible;
+    }
+}

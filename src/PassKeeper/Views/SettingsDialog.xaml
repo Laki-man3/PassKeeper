@@ -1,0 +1,156 @@
+<local:DialogBase x:Class="PassKeeper.Views.SettingsDialog"
+                  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                  xmlns:local="clr-namespace:PassKeeper.Views"
+                  xmlns:l="clr-namespace:PassKeeper.Localization"
+                  xmlns:c="clr-namespace:PassKeeper.Controls">
+    <local:DialogBase.Resources>
+        <Style x:Key="SettingRow" TargetType="Grid">
+            <Setter Property="Margin" Value="0,0,0,14" />
+        </Style>
+        <Style x:Key="SectionCard" TargetType="Border" BasedOn="{StaticResource Card}">
+            <Setter Property="Padding" Value="18,16,18,4" />
+            <Setter Property="Margin" Value="0,0,0,14" />
+        </Style>
+    </local:DialogBase.Resources>
+
+    <DockPanel>
+        <Grid DockPanel.Dock="Top" Margin="26,20,18,12">
+            <TextBlock Style="{StaticResource Text.H2}" FontSize="18" Text="{l:T Settings.Title}" VerticalAlignment="Center" />
+            <Button Style="{StaticResource Btn.Icon}" Content="&#xE711;" HorizontalAlignment="Right" Click="Close_Click" />
+        </Grid>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False">
+            <StackPanel Margin="26,0,26,20">
+
+                <!-- General -->
+                <TextBlock Style="{StaticResource Text.Label}" Text="{l:T Settings.General}" />
+                <Border Style="{StaticResource SectionCard}">
+                    <StackPanel>
+                        <Grid Style="{StaticResource SettingRow}">
+                            <TextBlock Text="{l:T Settings.Language}" VerticalAlignment="Center" />
+                            <Border Style="{StaticResource SegmentHost}" HorizontalAlignment="Right">
+                                <StackPanel Orientation="Horizontal">
+                                    <RadioButton x:Name="LangRu" Style="{StaticResource Segment}" Content="Русский" GroupName="Lang" Checked="Lang_Checked" />
+                                    <RadioButton x:Name="LangEn" Style="{StaticResource Segment}" Content="English" GroupName="Lang" Checked="Lang_Checked" />
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                        <Grid Style="{StaticResource SettingRow}">
+                            <TextBlock Text="{l:T Settings.Theme}" VerticalAlignment="Center" />
+                            <Border Style="{StaticResource SegmentHost}" HorizontalAlignment="Right">
+                                <StackPanel Orientation="Horizontal">
+                                    <RadioButton x:Name="ThemeDark" Style="{StaticResource Segment}" Content="{l:T Settings.ThemeDark}" GroupName="Theme" Checked="Theme_Checked" />
+                                    <RadioButton x:Name="ThemeLight" Style="{StaticResource Segment}" Content="{l:T Settings.ThemeLight}" GroupName="Theme" Checked="Theme_Checked" />
+                                    <RadioButton x:Name="ThemeSystem" Style="{StaticResource Segment}" Content="{l:T Settings.ThemeSystem}" GroupName="Theme" Checked="Theme_Checked" />
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                        <CheckBox x:Name="Autostart" Style="{StaticResource Toggle}" Margin="0,0,0,6" Click="Autostart_Click">
+                            <StackPanel>
+                                <TextBlock Text="{l:T Settings.Autostart}" />
+                                <TextBlock x:Name="AutostartNote" Style="{StaticResource Text.Muted}" Text="{l:T Settings.AutostartHint}" />
+                            </StackPanel>
+                        </CheckBox>
+                        <CheckBox x:Name="MinimizeToTray" Style="{StaticResource Toggle}" Margin="0,8,0,14" Click="Simple_Changed">
+                            <StackPanel>
+                                <TextBlock Text="{l:T Settings.Tray}" />
+                                <TextBlock Style="{StaticResource Text.Muted}" Text="{l:T Settings.TrayHint}" />
+                            </StackPanel>
+                        </CheckBox>
+                    </StackPanel>
+                </Border>
+
+                <!-- Security -->
+                <TextBlock Style="{StaticResource Text.Label}" Text="{l:T Settings.Security}" />
+                <Border Style="{StaticResource SectionCard}">
+                    <StackPanel>
+                        <Grid Style="{StaticResource SettingRow}">
+                            <StackPanel Margin="0,0,200,0">
+                                <TextBlock Text="{l:T Settings.AutoLock}" />
+                                <TextBlock Style="{StaticResource Text.Muted}" Text="{l:T Settings.AutoLockHint}" />
+                            </StackPanel>
+                            <ComboBox x:Name="AutoLock" Width="180" HorizontalAlignment="Right" VerticalAlignment="Center" SelectionChanged="Simple_Changed" />
+                        </Grid>
+                        <Grid Style="{StaticResource SettingRow}">
+                            <StackPanel Margin="0,0,200,0">
+                                <TextBlock Text="{l:T Settings.Clipboard}" />
+                                <TextBlock Style="{StaticResource Text.Muted}" Text="{l:T Settings.ClipboardHint}" />
+                            </StackPanel>
+                            <ComboBox x:Name="ClipboardClear" Width="180" HorizontalAlignment="Right" VerticalAlignment="Center" SelectionChanged="Simple_Changed" />
+                        </Grid>
+                        <CheckBox x:Name="LockOnWindowsLock" Style="{StaticResource Toggle}" Margin="0,0,0,14" Content="{l:T Settings.LockOnWindowsLock}" Click="Simple_Changed" />
+                        <WrapPanel Margin="0,0,0,14">
+                            <Button Style="{StaticResource Btn.Secondary}" c:UI.Icon="&#xE8D7;" Content="{l:T Settings.ChangeMaster}" Margin="0,0,8,0" Click="ChangeMaster_Click" />
+                            <Button Style="{StaticResource Btn.Secondary}" c:UI.Icon="&#xE75F;" Content="{l:T Settings.ChangePin}" Click="ChangePin_Click" />
+                        </WrapPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Autofill -->
+                <TextBlock Style="{StaticResource Text.Label}" Text="{l:T Settings.Autofill}" />
+                <Border Style="{StaticResource SectionCard}">
+                    <StackPanel>
+                        <Grid Style="{StaticResource SettingRow}">
+                            <StackPanel Margin="0,0,200,0">
+                                <TextBlock Text="{l:T Settings.Hotkey}" />
+                                <TextBlock Style="{StaticResource Text.Muted}" Text="{l:T Settings.HotkeyHint}" />
+                                <TextBlock x:Name="HotkeyError" Style="{StaticResource Text.Muted}" Foreground="{DynamicResource Brush.Danger}" Visibility="Collapsed" Text="{l:T Settings.HotkeyTaken}" />
+                            </StackPanel>
+                            <TextBox x:Name="Hotkey" Width="180" HorizontalAlignment="Right" VerticalAlignment="Center" IsReadOnly="True" IsReadOnlyCaretVisible="False"
+                                     TextAlignment="Center" FontWeight="SemiBold" Cursor="Hand" PreviewKeyDown="Hotkey_PreviewKeyDown"
+                                     GotKeyboardFocus="Hotkey_GotFocus" LostKeyboardFocus="Hotkey_LostFocus" />
+                        </Grid>
+                        <CheckBox x:Name="Suggestions" Style="{StaticResource Toggle}" Margin="0,0,0,12" Click="Simple_Changed">
+                            <StackPanel>
+                                <TextBlock Text="{l:T Settings.Suggestions}" />
+                                <TextBlock Style="{StaticResource Text.Muted}" Text="{l:T Settings.SuggestionsHint}" />
+                            </StackPanel>
+                        </CheckBox>
+                        <CheckBox x:Name="Submit" Style="{StaticResource Toggle}" Margin="0,0,0,12" Content="{l:T Settings.Submit}" Click="Simple_Changed" />
+                        <CheckBox x:Name="Compatible" Style="{StaticResource Toggle}" Margin="0,0,0,12" Click="Simple_Changed">
+                            <StackPanel>
+                                <TextBlock Text="{l:T Settings.Compatible}" />
+                                <TextBlock Style="{StaticResource Text.Muted}" Text="{l:T Settings.CompatibleHint}" />
+                            </StackPanel>
+                        </CheckBox>
+                        <Grid Style="{StaticResource SettingRow}">
+                            <TextBlock Text="{l:T Settings.KeyDelay}" VerticalAlignment="Center" />
+                            <ComboBox x:Name="KeyDelay" Width="180" HorizontalAlignment="Right" SelectionChanged="Simple_Changed" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Data -->
+                <TextBlock Style="{StaticResource Text.Label}" Text="{l:T Settings.Data}" />
+                <Border Style="{StaticResource SectionCard}">
+                    <StackPanel>
+                        <TextBlock Text="{l:T Settings.DataFolder}" />
+                        <TextBlock x:Name="DataPath" Style="{StaticResource Text.Muted}" FontFamily="{StaticResource Font.Mono}" Margin="0,4,0,12" TextWrapping="Wrap" />
+                        <WrapPanel Margin="0,0,0,14">
+                            <Button Style="{StaticResource Btn.Secondary}" c:UI.Icon="&#xE838;" Content="{l:T Settings.OpenFolder}" Margin="0,0,8,0" Click="OpenFolder_Click" />
+                            <Button Style="{StaticResource Btn.Secondary}" c:UI.Icon="&#xE78C;" Content="{l:T Settings.Backup}" Click="Backup_Click" />
+                        </WrapPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- About -->
+                <TextBlock Style="{StaticResource Text.Label}" Text="{l:T Settings.About}" />
+                <Border Style="{StaticResource SectionCard}" Padding="18,16">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition />
+                        </Grid.ColumnDefinitions>
+                        <Image Source="{StaticResource LogoImage}" Width="44" Height="44" VerticalAlignment="Top" />
+                        <StackPanel Grid.Column="1" Margin="14,0,0,0">
+                            <TextBlock x:Name="Version" FontWeight="SemiBold" FontSize="14" />
+                            <TextBlock x:Name="InstallMode" Style="{StaticResource Text.Muted}" Margin="0,2,0,0" />
+                            <TextBlock Style="{StaticResource Text.Secondary}" FontSize="12.5" Margin="0,8,0,0" Text="{l:T Settings.AboutText}" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</local:DialogBase>

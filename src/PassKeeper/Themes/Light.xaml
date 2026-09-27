@@ -1,0 +1,42 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Color x:Key="Color.Accent">#6A4FF5</Color>
+    <Color x:Key="Color.Shadow">#1B2140</Color>
+
+    <SolidColorBrush x:Key="Brush.WindowBg" Color="#F5F6FA" />
+    <SolidColorBrush x:Key="Brush.Sidebar" Color="#EDEFF5" />
+    <SolidColorBrush x:Key="Brush.Surface" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="Brush.SurfaceAlt" Color="#F7F8FB" />
+    <SolidColorBrush x:Key="Brush.Popup" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="Brush.Border" Color="#E0E3EB" />
+    <SolidColorBrush x:Key="Brush.BorderStrong" Color="#C9CEDA" />
+    <SolidColorBrush x:Key="Brush.Hover" Color="#ECEEF4" />
+    <SolidColorBrush x:Key="Brush.Pressed" Color="#E2E5EE" />
+
+    <SolidColorBrush x:Key="Brush.Text" Color="#141824" />
+    <SolidColorBrush x:Key="Brush.TextSecondary" Color="#4D5466" />
+    <SolidColorBrush x:Key="Brush.TextMuted" Color="#8990A2" />
+
+    <SolidColorBrush x:Key="Brush.Accent" Color="#6A4FF5" />
+    <SolidColorBrush x:Key="Brush.AccentHover" Color="#7A62FF" />
+    <SolidColorBrush x:Key="Brush.AccentPressed" Color="#5A3FE4" />
+    <SolidColorBrush x:Key="Brush.AccentSoft" Color="#1C6A4FF5" />
+    <SolidColorBrush x:Key="Brush.AccentSoftHover" Color="#2B6A4FF5" />
+    <SolidColorBrush x:Key="Brush.AccentText" Color="#5B3FEA" />
+    <SolidColorBrush x:Key="Brush.OnAccent" Color="#FFFFFF" />
+
+    <SolidColorBrush x:Key="Brush.Danger" Color="#DC3450" />
+    <SolidColorBrush x:Key="Brush.DangerSoft" Color="#16DC3450" />
+    <SolidColorBrush x:Key="Brush.DangerSoftHover" Color="#26DC3450" />
+    <SolidColorBrush x:Key="Brush.Success" Color="#1C9F6D" />
+    <SolidColorBrush x:Key="Brush.SuccessSoft" Color="#181C9F6D" />
+    <SolidColorBrush x:Key="Brush.Warning" Color="#C98200" />
+    <SolidColorBrush x:Key="Brush.WarningSoft" Color="#18C98200" />
+
+    <SolidColorBrush x:Key="Brush.Overlay" Color="#80141824" />
+    <SolidColorBrush x:Key="Brush.Selection" Color="#556A4FF5" />
+    <LinearGradientBrush x:Key="Brush.PageGlow" StartPoint="0.5,0" EndPoint="0.5,1">
+        <GradientStop Offset="0" Color="#EEEBFF" />
+        <GradientStop Offset="0.55" Color="#F5F6FA" />
+    </LinearGradientBrush>
+</ResourceDictionary>

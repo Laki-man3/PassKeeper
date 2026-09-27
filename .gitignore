@@ -1,0 +1,26 @@
+## Build output
+bin/
+obj/
+artifacts/
+dist/
+TestResults/
+*.binlog
+
+## IDE
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.DotSettings.user
+
+## OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+## Never commit real vaults or exports
+*.pkv
+*.pkx
+*.kdbx
+Data/

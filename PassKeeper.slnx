@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PassKeeper.Core/PassKeeper.Core.csproj" />
+    <Project Path="src/PassKeeper/PassKeeper.csproj" />
+    <Project Path="src/PassKeeper.Setup/PassKeeper.Setup.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PassKeeper.Tests/PassKeeper.Tests.csproj" />
+  </Folder>
+</Solution>

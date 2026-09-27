@@ -1,0 +1,123 @@
+<UserControl x:Class="PassKeeper.Views.EntryEditorView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:l="clr-namespace:PassKeeper.Localization"
+             xmlns:c="clr-namespace:PassKeeper.Controls">
+    <DockPanel>
+        <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource Brush.Border}" BorderThickness="0,1,0,0" Padding="36,12">
+            <Grid MaxWidth="700" HorizontalAlignment="Stretch">
+                <TextBlock x:Name="Error" Style="{StaticResource Text.Body}" Foreground="{DynamicResource Brush.Danger}" VerticalAlignment="Center" Visibility="Collapsed" Margin="0,0,220,0" />
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button Style="{StaticResource Btn.Ghost}" Content="{l:T Common.Cancel}" Click="Cancel_Click" />
+                    <Button Style="{StaticResource Btn.Primary}" c:UI.Icon="&#xE74E;" Content="{l:T Common.Save}" Margin="8,0,0,0" Click="Save_Click" MinWidth="120" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False">
+            <StackPanel Margin="36,46,36,28" MaxWidth="700">
+                <TextBlock x:Name="Heading" Style="{StaticResource Text.H2}" FontSize="22" Margin="0,0,0,20" />
+
+                <TextBlock Style="{StaticResource Text.Label}" Text="{l:T Field.Title}" />
+                <TextBox x:Name="TitleBox" c:UI.Placeholder="{l:T Editor.TitlePlaceholder}" TextChanged="Any_Changed" />
+
+                <Grid Margin="0,14,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition />
+                        <ColumnDefinition Width="14" />
+                        <ColumnDefinition />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource Text.Label}" Text="{l:T Field.Login}" />
+                        <TextBox x:Name="LoginBox" c:UI.Placeholder="{l:T Editor.LoginPlaceholder}" TextChanged="Any_Changed" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Style="{StaticResource Text.Label}" Text="{l:T Field.Password}" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <c:SecretBox x:Name="PasswordBox" ValueChanged="Any_Changed" />
+                            <Button Grid.Column="1" Style="{StaticResource Btn.Secondary}" Width="38" Height="38" Padding="0" Margin="6,0,0,0"
+                                    c:UI.Icon="&#xE8D7;" ToolTip="{l:T Editor.Generate}" Click="Generate_Click" />
+                        </Grid>
+                        <c:StrengthMeter Margin="0,8,0,0" Password="{Binding Value, ElementName=PasswordBox}" />
+                    </StackPanel>
+                </Grid>
+
+                <TextBlock Style="{StaticResource Text.Label}" Margin="0,14,0,6" Text="{l:T Field.Website}" />
+                <TextBox x:Name="UrlBox" c:UI.Placeholder="https://example.com" TextChanged="Any_Changed" />
+
+                <Grid Margin="0,14,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition />
+                        <ColumnDefinition Width="14" />
+                        <ColumnDefinition />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource Text.Label}" Text="{l:T Field.Email}" />
+                        <TextBox x:Name="EmailBox" c:UI.Placeholder="name@example.com" TextChanged="Any_Changed" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Style="{StaticResource Text.Label}" Text="{l:T Field.Phone}" />
+                        <TextBox x:Name="PhoneBox" c:UI.Placeholder="+7 900 000-00-00" TextChanged="Any_Changed" />
+                    </StackPanel>
+                </Grid>
+
+                <Grid Margin="0,14,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition />
+                        <ColumnDefinition Width="14" />
+                        <ColumnDefinition />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource Text.Label}" Text="{l:T Field.Key}" />
+                        <c:SecretBox x:Name="KeyBox" Placeholder="{l:T Editor.KeyPlaceholder}" ValueChanged="Any_Changed" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Style="{StaticResource Text.Label}" Text="{l:T Field.Totp}" />
+                        <TextBox x:Name="TotpBox" c:UI.Placeholder="{l:T Editor.TotpPlaceholder}" TextChanged="Any_Changed" />
+                    </StackPanel>
+                </Grid>
+
+                <TextBlock Style="{StaticResource Text.Label}" Margin="0,14,0,6" Text="{l:T Field.Folder}" />
+                <ComboBox x:Name="FolderBox" IsEditable="True" c:UI.Placeholder="{l:T Editor.FolderPlaceholder}" />
+
+                <TextBlock Style="{StaticResource Text.Label}" Margin="0,14,0,6" Text="{l:T Field.Notes}" />
+                <TextBox x:Name="NotesBox" Style="{StaticResource TextBox.Multiline}" TextChanged="Any_Changed" />
+
+                <CheckBox x:Name="FavoriteBox" Margin="0,16,0,0" Content="{l:T Editor.Favorite}" Click="Any_Changed" />
+
+                <!-- custom fields -->
+                <Grid Margin="0,24,0,8">
+                    <TextBlock Style="{StaticResource Text.H3}" Text="{l:T Details.CustomFields}" VerticalAlignment="Center" />
+                    <Button Style="{StaticResource Btn.Link}" HorizontalAlignment="Right" Content="{l:T Editor.AddField}" Click="AddField_Click" />
+                </Grid>
+                <StackPanel x:Name="FieldsPanel" />
+                <TextBlock x:Name="NoFields" Style="{StaticResource Text.Muted}" Text="{l:T Editor.NoFields}" />
+
+                <!-- auto-type / apps -->
+                <Border Style="{StaticResource Card}" Margin="0,22,0,0" Padding="16,14">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE765;" FontSize="15" Foreground="{DynamicResource Brush.AccentText}" Margin="0,0,10,0" />
+                            <TextBlock Style="{StaticResource Text.H3}" Text="{l:T Editor.AutoTypeSection}" />
+                        </StackPanel>
+                        <TextBlock Style="{StaticResource Text.Muted}" Margin="0,6,0,0" Text="{l:T Editor.AutoTypeHelp}" />
+
+                        <TextBlock Style="{StaticResource Text.Label}" Margin="0,14,0,6" Text="{l:T Field.Windows}" />
+                        <TextBox x:Name="WindowsBox" Style="{StaticResource TextBox.Multiline}" MinHeight="64" c:UI.Placeholder="{l:T Editor.WindowsPlaceholder}" TextChanged="Any_Changed" />
+
+                        <TextBlock Style="{StaticResource Text.Label}" Margin="0,14,0,6" Text="{l:T Field.ExtraUrls}" />
+                        <TextBox x:Name="ExtraUrlsBox" Style="{StaticResource TextBox.Multiline}" MinHeight="64" c:UI.Placeholder="{l:T Editor.ExtraUrlsPlaceholder}" TextChanged="Any_Changed" />
+
+                        <TextBlock Style="{StaticResource Text.Label}" Margin="0,14,0,6" Text="{l:T Field.Sequence}" />
+                        <TextBox x:Name="SequenceBox" FontFamily="{StaticResource Font.Mono}" c:UI.Placeholder="{}{USERNAME}{TAB}{PASSWORD}{ENTER}" TextChanged="Any_Changed" />
+                        <TextBlock Style="{StaticResource Text.Muted}" Margin="0,6,0,0" Text="{l:T Editor.SequenceHelp}" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</UserControl>

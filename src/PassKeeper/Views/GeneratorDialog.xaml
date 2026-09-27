@@ -1,0 +1,48 @@
+<local:DialogBase x:Class="PassKeeper.Views.GeneratorDialog"
+                  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                  xmlns:local="clr-namespace:PassKeeper.Views"
+                  xmlns:l="clr-namespace:PassKeeper.Localization"
+                  xmlns:c="clr-namespace:PassKeeper.Controls">
+    <StackPanel Margin="26,22,26,22">
+        <Grid>
+            <TextBlock Style="{StaticResource Text.H2}" FontSize="18" Text="{l:T Generator.Title}" VerticalAlignment="Center" />
+            <Button Style="{StaticResource Btn.Icon}" Content="&#xE711;" HorizontalAlignment="Right" Click="Close_Click" />
+        </Grid>
+
+        <Border Margin="0,16,0,0" CornerRadius="12" Background="{DynamicResource Brush.SurfaceAlt}" BorderBrush="{DynamicResource Brush.Border}" BorderThickness="1" Padding="16,14">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="Output" FontFamily="{StaticResource Font.Mono}" FontSize="18" TextWrapping="Wrap" VerticalAlignment="Center" MinHeight="26" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top" Margin="8,-4,-6,0">
+                    <Button Style="{StaticResource Btn.Icon}" Content="&#xE72C;" ToolTip="{l:T Generator.Regenerate}" Click="Regenerate_Click" />
+                    <Button Style="{StaticResource Btn.Icon}" Content="&#xE8C8;" ToolTip="{l:T Common.Copy}" Click="Copy_Click" />
+                </StackPanel>
+            </Grid>
+        </Border>
+        <c:StrengthMeter x:Name="Meter" Margin="2,10,0,0" />
+
+        <Grid Margin="0,20,0,6">
+            <TextBlock Style="{StaticResource Text.Label}" Margin="0" Text="{l:T Generator.Length}" />
+            <TextBlock x:Name="LengthText" HorizontalAlignment="Right" FontWeight="SemiBold" />
+        </Grid>
+        <Slider x:Name="LengthSlider" Minimum="6" Maximum="64" SmallChange="1" LargeChange="4" IsSnapToTickEnabled="True" TickFrequency="1" ValueChanged="Options_Changed" />
+
+        <UniformGrid Columns="2" Margin="0,16,0,0">
+            <CheckBox x:Name="Upper" Content="A–Z" Margin="0,0,0,10" Click="Options_Changed" />
+            <CheckBox x:Name="Lower" Content="a–z" Margin="0,0,0,10" Click="Options_Changed" />
+            <CheckBox x:Name="Digits" Content="0–9" Margin="0,0,0,10" Click="Options_Changed" />
+            <CheckBox x:Name="Symbols" Content="!@#$%^&amp;*" Margin="0,0,0,10" Click="Options_Changed" />
+        </UniformGrid>
+        <CheckBox x:Name="Ambiguous" Content="{l:T Generator.ExcludeAmbiguous}" Click="Options_Changed" />
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,24,0,0">
+            <Button x:Name="CloseButton" Style="{StaticResource Btn.Ghost}" Content="{l:T Common.Close}" Click="Close_Click" />
+            <Button x:Name="UseButton" Style="{StaticResource Btn.Primary}" Content="{l:T Generator.Use}" Margin="8,0,0,0" MinWidth="130" Click="Use_Click" />
+            <Button x:Name="CopyButton" Style="{StaticResource Btn.Primary}" c:UI.Icon="&#xE8C8;" Content="{l:T Generator.CopyAndClose}" Margin="8,0,0,0" Click="CopyClose_Click" />
+        </StackPanel>
+    </StackPanel>
+</local:DialogBase>

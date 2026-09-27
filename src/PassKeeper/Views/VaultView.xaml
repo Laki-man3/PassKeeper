@@ -1,0 +1,172 @@
+<UserControl x:Class="PassKeeper.Views.VaultView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:l="clr-namespace:PassKeeper.Localization"
+             xmlns:c="clr-namespace:PassKeeper.Controls"
+             xmlns:vm="clr-namespace:PassKeeper.ViewModels">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+
+        <DataTemplate x:Key="NavTemplate" DataType="{x:Type vm:NavItem}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="26" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="Ic" Style="{StaticResource Icon}" FontSize="14" HorizontalAlignment="Left" Text="{Binding Icon}" />
+                <TextBlock x:Name="Lb" Grid.Column="1" Text="{Binding Label}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" FontSize="13" />
+                <TextBlock Grid.Column="2" Text="{Binding CountText}" VerticalAlignment="Center" FontSize="11.5" Foreground="{DynamicResource Brush.TextMuted}" Margin="8,0,0,0" />
+            </Grid>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsHeader}" Value="True">
+                    <Setter TargetName="Ic" Property="Visibility" Value="Collapsed" />
+                    <Setter TargetName="Lb" Property="FontSize" Value="11" />
+                    <Setter TargetName="Lb" Property="FontWeight" Value="SemiBold" />
+                    <Setter TargetName="Lb" Property="Foreground" Value="{DynamicResource Brush.TextMuted}" />
+                    <Setter TargetName="Lb" Property="Grid.Column" Value="0" />
+                    <Setter TargetName="Lb" Property="Grid.ColumnSpan" Value="2" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <Style x:Key="NavContainer" TargetType="ListBoxItem" BasedOn="{StaticResource Item.Nav}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsHeader}" Value="True">
+                    <Setter Property="IsHitTestVisible" Value="False" />
+                    <Setter Property="Focusable" Value="False" />
+                    <Setter Property="Height" Value="30" />
+                    <Setter Property="Margin" Value="10,10,10,0" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <DataTemplate x:Key="EntryTemplate" DataType="{x:Type vm:EntryItem}">
+            <Grid Height="42">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <c:Avatar SourceText="{Binding AvatarSource}" Size="36" />
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0,6,0">
+                    <TextBlock Text="{Binding Title}" FontSize="13.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding Subtitle}" FontSize="12" Foreground="{DynamicResource Brush.TextMuted}" TextTrimming="CharacterEllipsis" Margin="0,1,0,0" />
+                </StackPanel>
+                <TextBlock Grid.Column="2" Style="{StaticResource Icon}" Text="&#xE735;" FontSize="12" Foreground="{DynamicResource Brush.Warning}"
+                           Visibility="{Binding Favorite, Converter={StaticResource BoolToVis}}" Margin="0,0,4,0" />
+            </Grid>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="236" />
+            <ColumnDefinition Width="340" />
+            <ColumnDefinition Width="*" MinWidth="320" />
+        </Grid.ColumnDefinitions>
+
+        <!-- ============================================================ sidebar -->
+        <Border Background="{DynamicResource Brush.Sidebar}" BorderBrush="{DynamicResource Brush.Border}" BorderThickness="0,0,1,0">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="20,16,0,20">
+                    <Image Source="{StaticResource LogoImage}" Width="28" Height="28" />
+                    <TextBlock Text="PassKeeper" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" Margin="10,0,0,0" />
+                </StackPanel>
+
+                <StackPanel DockPanel.Dock="Bottom" Margin="10,6,10,12">
+                    <Button Style="{StaticResource Btn.Nav}" c:UI.Icon="&#xE8D7;" Content="{l:T Vault.Generator}" Click="Generator_Click" />
+                    <Button Style="{StaticResource Btn.Nav}" c:UI.Icon="&#xE8B5;" Content="{l:T Vault.Import}" Click="Import_Click" />
+                    <Button Style="{StaticResource Btn.Nav}" c:UI.Icon="&#xEDE1;" Content="{l:T Vault.Export}" Click="Export_Click" />
+                    <Button Style="{StaticResource Btn.Nav}" c:UI.Icon="&#xE713;" Content="{l:T Vault.Settings}" Click="Settings_Click" />
+                    <Border Height="1" Background="{DynamicResource Brush.Border}" Margin="4,8,4,8" />
+                    <Grid Margin="4,0,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Border Width="30" Height="30" CornerRadius="15">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Offset="0" Color="#7B61FF" />
+                                    <GradientStop Offset="1" Color="#3D8BFF" />
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <TextBlock x:Name="UserInitial" Foreground="White" FontWeight="SemiBold" FontSize="13" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <StackPanel Grid.Column="1" Margin="10,0,4,0" VerticalAlignment="Center">
+                            <TextBlock x:Name="UserNameText" FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Style="{StaticResource Text.Muted}" FontSize="11" Text="{l:T Vault.LocalProfile}" />
+                        </StackPanel>
+                        <Button Grid.Column="2" Style="{StaticResource Btn.Icon}" Content="&#xE72E;" ToolTip="{l:T Vault.LockTip}" Click="Lock_Click" />
+                    </Grid>
+                </StackPanel>
+
+                <ListBox x:Name="NavList" Style="{StaticResource List.Plain}" ItemContainerStyle="{StaticResource NavContainer}"
+                         ItemTemplate="{StaticResource NavTemplate}" SelectionChanged="NavList_SelectionChanged" />
+            </DockPanel>
+        </Border>
+
+        <!-- ============================================================ entry list -->
+        <Border Grid.Column="1" BorderBrush="{DynamicResource Brush.Border}" BorderThickness="0,0,1,0">
+            <DockPanel>
+                <Grid DockPanel.Dock="Top" Margin="16,46,16,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="Search" Style="{StaticResource TextBox.Search}" c:UI.Placeholder="{l:T Vault.SearchPlaceholder}" TextChanged="Search_TextChanged" />
+                    <TextBlock Style="{StaticResource Icon}" Text="&#xE721;" FontSize="13" Foreground="{DynamicResource Brush.TextMuted}" HorizontalAlignment="Left" Margin="12,0,0,0" IsHitTestVisible="False" />
+                    <Button x:Name="ClearSearch" Style="{StaticResource Btn.Icon}" Width="28" Height="28" FontSize="10" Content="&#xE894;" HorizontalAlignment="Right" Margin="0,0,5,0" Click="ClearSearch_Click" Visibility="Collapsed" />
+                    <Button x:Name="AddButton" Grid.Column="1" Style="{StaticResource Btn.Primary}" Width="38" Height="38" Padding="0" Margin="8,0,0,0"
+                            c:UI.Icon="&#xE710;" ToolTip="{l:T Vault.AddTip}" Click="Add_Click" />
+                </Grid>
+                <Grid DockPanel.Dock="Top" Margin="20,6,18,6">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock x:Name="ListTitle" Style="{StaticResource Text.H3}" VerticalAlignment="Center" />
+                        <Border Style="{StaticResource Badge}" Margin="8,0,0,0">
+                            <TextBlock x:Name="ListCount" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Brush.AccentText}" />
+                        </Border>
+                    </StackPanel>
+                    <Button x:Name="EmptyTrashButton" Style="{StaticResource Btn.Link}" HorizontalAlignment="Right" FontSize="12" Content="{l:T Vault.EmptyTrash}" Click="EmptyTrash_Click" Visibility="Collapsed" />
+                    <ComboBox x:Name="SortBox" HorizontalAlignment="Right" MinHeight="28" Height="28" FontSize="12" Width="150" SelectionChanged="Sort_SelectionChanged" />
+                </Grid>
+                <Grid>
+                    <ListBox x:Name="EntryList" Style="{StaticResource List.Plain}" ItemContainerStyle="{StaticResource Item.Card}" Padding="0,0,0,12"
+                             ItemTemplate="{StaticResource EntryTemplate}" SelectionChanged="EntryList_SelectionChanged"
+                             KeyDown="EntryList_KeyDown" MouseDoubleClick="EntryList_MouseDoubleClick">
+                        <ListBox.ContextMenu>
+                            <ContextMenu x:Name="EntryMenu" Opened="EntryMenu_Opened">
+                                <MenuItem x:Name="MenuCopyUser" Header="{l:T Vault.CopyLogin}" InputGestureText="Ctrl+B" Click="MenuCopyUser_Click"><MenuItem.Icon><TextBlock Text="&#xE77B;" /></MenuItem.Icon></MenuItem>
+                                <MenuItem x:Name="MenuCopyPassword" Header="{l:T Vault.CopyPassword}" InputGestureText="Ctrl+C" Click="MenuCopyPassword_Click"><MenuItem.Icon><TextBlock Text="&#xE8D7;" /></MenuItem.Icon></MenuItem>
+                                <MenuItem x:Name="MenuOpenUrl" Header="{l:T Vault.OpenSite}" Click="MenuOpenUrl_Click"><MenuItem.Icon><TextBlock Text="&#xE774;" /></MenuItem.Icon></MenuItem>
+                                <Separator />
+                                <MenuItem x:Name="MenuFavorite" Click="MenuFavorite_Click"><MenuItem.Icon><TextBlock Text="&#xE734;" /></MenuItem.Icon></MenuItem>
+                                <MenuItem x:Name="MenuEdit" Header="{l:T Common.Edit}" InputGestureText="Ctrl+E" Click="MenuEdit_Click"><MenuItem.Icon><TextBlock Text="&#xE70F;" /></MenuItem.Icon></MenuItem>
+                                <MenuItem x:Name="MenuDuplicate" Header="{l:T Vault.Duplicate}" Click="MenuDuplicate_Click"><MenuItem.Icon><TextBlock Text="&#xE8C8;" /></MenuItem.Icon></MenuItem>
+                                <MenuItem x:Name="MenuRestore" Header="{l:T Vault.Restore}" Click="MenuRestore_Click"><MenuItem.Icon><TextBlock Text="&#xE7A7;" /></MenuItem.Icon></MenuItem>
+                                <MenuItem x:Name="MenuDelete" Header="{l:T Common.Delete}" InputGestureText="Del" Click="MenuDelete_Click"><MenuItem.Icon><TextBlock Text="&#xE74D;" /></MenuItem.Icon></MenuItem>
+                            </ContextMenu>
+                        </ListBox.ContextMenu>
+                    </ListBox>
+
+                    <StackPanel x:Name="EmptyState" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="24,0,24,60" Visibility="Collapsed" MaxWidth="260">
+                        <Border Width="56" Height="56" CornerRadius="18" Background="{DynamicResource Brush.AccentSoft}" HorizontalAlignment="Center">
+                            <TextBlock x:Name="EmptyIcon" Style="{StaticResource Icon}" FontSize="24" Foreground="{DynamicResource Brush.AccentText}" Text="&#xE8D7;" />
+                        </Border>
+                        <TextBlock x:Name="EmptyTitle" Style="{StaticResource Text.H3}" TextAlignment="Center" Margin="0,16,0,6" />
+                        <TextBlock x:Name="EmptyText" Style="{StaticResource Text.Muted}" TextAlignment="Center" />
+                        <StackPanel x:Name="EmptyActions" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,16,0,0">
+                            <Button Style="{StaticResource Btn.Primary}" c:UI.Icon="&#xE710;" Content="{l:T Vault.AddShort}" Click="Add_Click" />
+                            <Button Style="{StaticResource Btn.Secondary}" c:UI.Icon="&#xE8B5;" Content="{l:T Vault.Import}" Margin="8,0,0,0" Click="Import_Click" />
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+            </DockPanel>
+        </Border>
+
+        <!-- ============================================================ details -->
+        <ContentControl x:Name="DetailHost" Grid.Column="2" Focusable="False" IsTabStop="False" />
+    </Grid>
+</UserControl>
