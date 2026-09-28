@@ -8,7 +8,6 @@ using PassKeeper.Core.Matching;
 using PassKeeper.Core.Storage;
 using PassKeeper.Localization;
 using PassKeeper.Services;
-using PassKeeper.Setup;
 using PassKeeper.Views;
 using PassKeeper.Windows;
 
@@ -46,13 +45,6 @@ public partial class App : Application
         base.OnStartup(e);
         DispatcherUnhandledException += OnUnhandledException;
 
-        if (_options.Uninstall)
-        {
-            Loc.I.Language = Loc.DefaultLanguage();
-            Uninstaller.Run(_options);
-            return;
-        }
-
         DataDirectory = AppPaths.ResolveDataDirectory(_options.DataDirectory);
         if (_options.ScreenshotsDirectory != null || _options.SelfTestReport != null)
         {
@@ -60,7 +52,7 @@ public partial class App : Application
             Directory.CreateDirectory(DataDirectory);
         }
         Settings = AppSettings.Load(DataDirectory);
-        Loc.I.Language = string.IsNullOrEmpty(Settings.Language) ? Loc.DefaultLanguage() : Settings.Language;
+        Loc.I.Language = !string.IsNullOrEmpty(Settings.Language) ? Settings.Language : AppPaths.InstallerLanguage() ?? Loc.DefaultLanguage();
         ThemeService.Initialize();
         ThemeService.Apply(Settings.Theme);
 
@@ -75,7 +67,7 @@ public partial class App : Application
 
         if (_options.ScreenshotsDirectory != null)
         {
-            DevScreens.Run(_options.ScreenshotsDirectory);
+            DevScreens.Run(_options.ScreenshotsDirectory, _options.ScreenshotsLanguage);
             return;
         }
         if (_options.SelfTestReport != null)
@@ -98,7 +90,7 @@ public partial class App : Application
         Hotkeys.Pressed += () => AutoType.OnHotkey();
         var hotkeyOk = ApplyHotkey(Settings.AutoTypeHotkey);
 
-        _idle = new IdleMonitor { Period = TimeSpan.FromMinutes(Settings.AutoLockMinutes) };
+        _idle = new IdleMonitor { Period = TimeSpan.FromSeconds(Settings.AutoLockSeconds) };
         _idle.Timeout += OnIdleTimeout;
         _idle.Start();
 
@@ -256,7 +248,7 @@ public partial class App : Application
 
     public void OnSettingsChanged()
     {
-        if (_idle != null) _idle.Period = TimeSpan.FromMinutes(Settings.AutoLockMinutes);
+        if (_idle != null) _idle.Period = TimeSpan.FromSeconds(Settings.AutoLockSeconds);
         if (Settings.SmartSuggestions) _watcher?.Start();
         else
         {
@@ -280,7 +272,7 @@ public partial class App : Application
             _popup ??= CreatePopup();
             if (!Vault.IsUnlocked)
             {
-                if (field.Kind is FieldKind.Password or FieldKind.Otp) _popup.ShowLocked(field, target);
+                if (field.Kind is FieldKind.Password or FieldKind.Otp or FieldKind.Pin) _popup.ShowLocked(field, target);
                 return;
             }
             var matches = EntryMatcher.Match(Vault.ActiveEntries, target.ToContext())

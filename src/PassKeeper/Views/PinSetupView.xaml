@@ -9,7 +9,7 @@
                 <TextBlock Style="{StaticResource Icon}" Text="&#xE8D7;" FontSize="28" Foreground="{DynamicResource Brush.AccentText}" />
             </Border>
             <TextBlock Style="{StaticResource Text.H1}" TextAlignment="Center" Margin="0,20,0,8" Text="{l:T Pin.Title}" />
-            <TextBlock Style="{StaticResource Text.Secondary}" TextAlignment="Center" Text="{l:T Pin.Subtitle}" />
+            <TextBlock x:Name="Subtitle" Style="{StaticResource Text.Secondary}" TextAlignment="Center" />
 
             <TextBlock Style="{StaticResource Text.Label}" Margin="0,26,0,6" Text="{l:T Pin.New}" />
             <PasswordBox x:Name="Pin" Style="{StaticResource PasswordBox.Pin}" PreviewTextInput="Digits_PreviewTextInput" />

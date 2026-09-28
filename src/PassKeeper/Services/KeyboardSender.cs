@@ -81,11 +81,19 @@ public sealed class KeyboardSender
         Pause();
     }
 
-    /// <summary>Select everything in the focused field and delete it.</summary>
+    /// <summary>
+    /// Select everything in the focused field and delete it. Classic Win32 edit controls of older dialogs
+    /// (VPN clients) ignore Ctrl+A, so the line is also selected with End, Shift+Home.
+    /// </summary>
     public void ClearField()
     {
         CheckTarget();
         Send(Key(0x11, false, false), Key(0x41, false, false), Key(0x41, false, true), Key(0x11, false, true));
+        Pause();
+        Tap(0x08, false);
+        Pause();
+        Tap(0x23, true);
+        Send(Key(0x10, false, false), Key(0x24, true, false), Key(0x24, true, true), Key(0x10, false, true));
         Pause();
         Tap(0x08, false);
         Pause();

@@ -80,6 +80,30 @@ public partial class EntryEditorView : UserControl
         }
     }
 
+    /// <summary>Known sign-in clients (VPN, VDI, token prompts): adds their window patterns and, if needed, a sequence.</summary>
+    private void AddApp_Click(object sender, RoutedEventArgs e)
+    {
+        var menu = new ContextMenu { PlacementTarget = AddAppButton, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
+        foreach (var app in KnownApps.All)
+        {
+            var item = new MenuItem { Header = app.Name };
+            item.Click += (_, _) => AddApp(app);
+            menu.Items.Add(item);
+        }
+        menu.IsOpen = true;
+    }
+
+    private void AddApp(KnownApp app)
+    {
+        var lines = Lines(WindowsBox.Text);
+        foreach (var pattern in app.Patterns)
+            if (!lines.Contains(pattern, StringComparer.OrdinalIgnoreCase)) lines.Add(pattern);
+        WindowsBox.Text = string.Join(Environment.NewLine, lines);
+        if (app.Sequence != null && SequenceBox.Text.Trim().Length == 0) SequenceBox.Text = app.Sequence;
+        if (TitleBox.Text.Trim().Length == 0) TitleBox.Text = app.Name;
+        App.Instance.Main.ShowToast(Loc.F("Editor.AppAdded", app.Name));
+    }
+
     private void AddField_Click(object sender, RoutedEventArgs e)
     {
         var row = AddFieldRow("", "", false);

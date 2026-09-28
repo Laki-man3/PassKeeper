@@ -76,6 +76,12 @@
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Tag" Value="{StaticResource AccentHover}" />
     </Style>
+    <Style x:Key="Button.Danger" TargetType="Button" BasedOn="{StaticResource Button.Base}">
+        <Setter Property="Background" Value="{StaticResource Danger}" />
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Tag" Value="#F57A90" />
+    </Style>
     <Style x:Key="Button.Ghost" TargetType="Button" BasedOn="{StaticResource Button.Base}">
         <Setter Property="Foreground" Value="{StaticResource TextSecondary}" />
     </Style>

@@ -28,6 +28,15 @@ public static class AutostartService
         }
     }
 
+    /// <summary>Default for the first-run screen: what was chosen in the installer (off for portable/unregistered copies).</summary>
+    public static bool DefaultForNewProfile()
+    {
+        if (IsEnabledForUser()) return true;
+        if (AppPaths.IsMachineInstall) return InstallLayout.ReadAutostartPreference(true) == true;
+        if (AppPaths.IsUserInstall) return InstallLayout.ReadAutostartPreference(false) == true;
+        return false;
+    }
+
     public static void SetForUser(bool enabled)
     {
         using var key = Registry.CurrentUser.CreateSubKey(InstallLayout.RunKeyPath);

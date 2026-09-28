@@ -18,6 +18,11 @@ namespace PassKeeper.Shared
         public const string RunValueName = "PassKeeper";
         public const string ManifestFileName = "install.manifest";
         public const string PortableMarker = "portable.txt";
+        public const string UninstallerName = "Uninstall.exe";
+        /// <summary>Choices made in the installer (HKCU or HKLM, by installation scope).</summary>
+        public const string AppKeyPath = @"Software\PassKeeper";
+        public const string AutostartPreferenceValue = "Autostart";
+        public const string LanguageValue = "Language";
 
         public static string DefaultInstallDir(bool allUsers)
         {
@@ -26,10 +31,54 @@ namespace PassKeeper.Shared
                 : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", AppName);
         }
 
+        /// <summary>Start menu folder with the application and uninstaller shortcuts.</summary>
+        public static string StartMenuFolder(bool allUsers)
+        {
+            var programs = Environment.GetFolderPath(allUsers ? Environment.SpecialFolder.CommonPrograms : Environment.SpecialFolder.Programs);
+            return Path.Combine(programs, AppName);
+        }
+
         public static string StartMenuShortcut(bool allUsers)
         {
-            var folder = Environment.GetFolderPath(allUsers ? Environment.SpecialFolder.CommonPrograms : Environment.SpecialFolder.Programs);
-            return Path.Combine(folder, AppName + ".lnk");
+            return Path.Combine(StartMenuFolder(allUsers), AppName + ".lnk");
+        }
+
+        /// <summary>Shortcut placed directly in "Programs" by version 1.0.0.</summary>
+        public static string LegacyStartMenuShortcut(bool allUsers)
+        {
+            var programs = Environment.GetFolderPath(allUsers ? Environment.SpecialFolder.CommonPrograms : Environment.SpecialFolder.Programs);
+            return Path.Combine(programs, AppName + ".lnk");
+        }
+
+        /// <summary>%APPDATA%\PassKeeper of the current Windows user: vault, PIN, settings, backups.</summary>
+        public static string UserDataDirectory()
+        {
+            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), AppName);
+        }
+
+        /// <summary>Value stored by the installer under <see cref="AppKeyPath"/>, or null.</summary>
+        public static object ReadInstallerValue(bool allUsers, string name)
+        {
+            try
+            {
+                using (var root = OpenRoot(allUsers))
+                using (var key = root.OpenSubKey(AppKeyPath))
+                {
+                    return key == null ? null : key.GetValue(name);
+                }
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+
+        /// <summary>"Start when signing in" as chosen in the installer; null when the installer did not record it.</summary>
+        public static bool? ReadAutostartPreference(bool allUsers)
+        {
+            var value = ReadInstallerValue(allUsers, AutostartPreferenceValue);
+            if (value is int) return (int)value != 0;
+            return null;
         }
 
         public static string DesktopShortcut(bool allUsers)

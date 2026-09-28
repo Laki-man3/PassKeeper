@@ -160,6 +160,7 @@ public sealed class SuggestionPopup : Window
         var what = kind switch
         {
             FieldKind.Otp => Loc.T("Suggest.FillOtp"),
+            FieldKind.Pin => Loc.T("Suggest.FillPin"),
             FieldKind.Key => Loc.T("Suggest.FillKey"),
             FieldKind.Phone when entry.Phone.Length > 0 => entry.Phone,
             FieldKind.Email when entry.Email.Length > 0 => entry.Email,

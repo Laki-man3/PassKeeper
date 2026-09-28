@@ -43,6 +43,7 @@ public sealed class AutoTypeService
                 return;
             }
             var target = await Task.Run(() => TargetDetector.Capture(hwnd, detectUrl: true));
+            var field = await Task.Run(() => FocusedField(hwnd));
 
             if (!_app.Vault.IsUnlocked && !await QuickUnlockWindow.ShowAsync(target.Describe())) return;
 
@@ -56,6 +57,21 @@ public sealed class AutoTypeService
             if (entry == null)
             {
                 Native.ForceForeground(hwnd);
+                return;
+            }
+            if (Native.IsInputBlocked(hwnd))
+            {
+                Native.ForceForeground(hwnd);
+                CopyInsteadOfTyping(entry, target.Describe(), field?.Kind ?? FieldKind.Password);
+                return;
+            }
+            // Without a custom sequence fill by fields: a pre-filled login (VPN clients remember it) is kept and
+            // a PIN, code or key field gets just that value.
+            if (field != null && string.IsNullOrWhiteSpace(entry.AutoTypeSequence))
+            {
+                Native.ForceForeground(hwnd);
+                await Task.Delay(120);
+                await FillFieldAsync(entry, field);
                 return;
             }
             await TypeAsync(entry, target, AutoTypeSequence.EffectiveSequence(entry, _app.Settings.SubmitAfterFill));
@@ -82,6 +98,50 @@ public sealed class AutoTypeService
         await TypeAsync(entry, target, AutoTypeSequence.EffectiveSequence(entry, _app.Settings.SubmitAfterFill));
     }
 
+    /// <summary>The sign-in field focused in the given window, if any (bounded: UI Automation may hang on a busy app).</summary>
+    private static LoginField? FocusedField(IntPtr hwnd)
+    {
+        var task = Task.Run(() =>
+        {
+            try
+            {
+                Native.GetWindowThreadProcessId(hwnd, out var pid);
+                var focused = AutomationElement.FocusedElement;
+                return focused != null && focused.Current.ProcessId == pid ? LoginField.From(focused, hwnd) : null;
+            }
+            catch (Exception ex) when (ex is ElementNotAvailableException or InvalidOperationException or System.Runtime.InteropServices.COMException)
+            {
+                return null;
+            }
+        });
+        return task.Wait(1500) ? task.Result : null;
+    }
+
+    /// <summary>
+    /// Windows (UIPI) drops simulated input into windows that run as administrator or as SYSTEM. The value is handed
+    /// over through the clipboard instead (cleared as configured) and the user pastes it.
+    /// </summary>
+    private void CopyInsteadOfTyping(VaultEntry entry, string target, FieldKind kind)
+    {
+        var (value, what) = kind switch
+        {
+            FieldKind.Pin => (entry.PinCode(), "AutoType.WhatPin"),
+            FieldKind.Otp => (ValueFor(entry, kind), "AutoType.WhatCode"),
+            FieldKind.Key => (entry.SecretKey, "AutoType.WhatKey"),
+            _ => (entry.Password, "AutoType.WhatPassword"),
+        };
+        if (value.Length == 0 || !ClipboardService.Copy(value, _app.Settings.ClipboardClearSeconds))
+        {
+            _app.Tray?.ShowBalloon(Loc.T("AutoType.ErrorTitle"), Loc.T("AutoType.Blocked"));
+            return;
+        }
+        var message = Loc.F("AutoType.Elevated", target, Loc.T(what));
+        var login = ValueFor(entry, FieldKind.Login);
+        if (kind is FieldKind.Password or FieldKind.Login && login.Length > 0) message += " " + Loc.F("AutoType.ElevatedLogin", login);
+        _app.Tray?.ShowBalloon("PassKeeper", message);
+        try { _app.Vault.MarkUsed(entry.Id); } catch (IOException) { }
+    }
+
     public async Task TypeAsync(VaultEntry entry, TargetWindow target, string sequence)
     {
         List<AutoTypeAction> actions;
@@ -96,6 +156,11 @@ public sealed class AutoTypeService
         }
 
         Native.ForceForeground(target.Handle);
+        if (Native.IsInputBlocked(target.Handle))
+        {
+            CopyInsteadOfTyping(entry, target.Describe(), FieldKind.Password);
+            return;
+        }
         await Task.Delay(120);
         var sender = CreateSender(target.Handle);
         try
@@ -121,6 +186,7 @@ public sealed class AutoTypeService
     public static bool CanFill(VaultEntry e, FieldKind kind) => kind switch
     {
         FieldKind.Password => e.Password.Length > 0,
+        FieldKind.Pin => e.PinCode().Length > 0,
         FieldKind.Otp => Core.Security.Totp.Parse(e.Totp) != null,
         FieldKind.Key => e.SecretKey.Length > 0,
         _ => e.Username.Length > 0 || e.Email.Length > 0 || e.Phone.Length > 0 || e.Password.Length > 0,
@@ -137,6 +203,7 @@ public sealed class AutoTypeService
             FieldKind.Otp => Core.Security.Totp.Compute(e.Totp, DateTimeOffset.UtcNow) ?? "",
             FieldKind.Key => e.SecretKey,
             FieldKind.Password => e.Password,
+            FieldKind.Pin => e.PinCode(),
             _ => login,
         };
     }
@@ -144,6 +211,11 @@ public sealed class AutoTypeService
     /// <summary>Suggestion click: fill the focused field (and its login/password counterpart) in place.</summary>
     public async Task FillFieldAsync(VaultEntry entry, LoginField field)
     {
+        if (Native.IsInputBlocked(field.Window))
+        {
+            CopyInsteadOfTyping(entry, Native.GetWindowTitle(field.Window), field.Kind);
+            return;
+        }
         var login = ValueFor(entry, FieldKind.Login);
         var sender = CreateSender(field.Window);
         var submit = _app.Settings.SubmitAfterFill;
@@ -151,8 +223,8 @@ public sealed class AutoTypeService
         {
             await Task.Run(() =>
             {
-                KeyboardSender.WaitForModifiersReleased(500);
-                if (field.Kind is FieldKind.Otp or FieldKind.Key)
+                KeyboardSender.WaitForModifiersReleased();
+                if (field.Kind is FieldKind.Otp or FieldKind.Key or FieldKind.Pin)
                 {
                     sender.ClearField();
                     sender.TypeText(ValueFor(entry, field.Kind));

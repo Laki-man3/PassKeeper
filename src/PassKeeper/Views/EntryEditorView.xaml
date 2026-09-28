@@ -61,7 +61,7 @@
                     </StackPanel>
                     <StackPanel Grid.Column="2">
                         <TextBlock Style="{StaticResource Text.Label}" Text="{l:T Field.Phone}" />
-                        <TextBox x:Name="PhoneBox" c:UI.Placeholder="+7 900 000-00-00" TextChanged="Any_Changed" />
+                        <TextBox x:Name="PhoneBox" c:UI.Placeholder="{l:T Editor.PhonePlaceholder}" TextChanged="Any_Changed" />
                     </StackPanel>
                 </Grid>
 
@@ -106,7 +106,11 @@
                         </StackPanel>
                         <TextBlock Style="{StaticResource Text.Muted}" Margin="0,6,0,0" Text="{l:T Editor.AutoTypeHelp}" />
 
-                        <TextBlock Style="{StaticResource Text.Label}" Margin="0,14,0,6" Text="{l:T Field.Windows}" />
+                        <Grid Margin="0,14,0,6">
+                            <TextBlock Style="{StaticResource Text.Label}" Text="{l:T Field.Windows}" VerticalAlignment="Center" />
+                            <Button x:Name="AddAppButton" Style="{StaticResource Btn.Link}" HorizontalAlignment="Right" Margin="0,-6,-8,-6"
+                                    Content="{l:T Editor.AddApp}" Click="AddApp_Click" />
+                        </Grid>
                         <TextBox x:Name="WindowsBox" Style="{StaticResource TextBox.Multiline}" MinHeight="64" c:UI.Placeholder="{l:T Editor.WindowsPlaceholder}" TextChanged="Any_Changed" />
 
                         <TextBlock Style="{StaticResource Text.Label}" Margin="0,14,0,6" Text="{l:T Field.ExtraUrls}" />
@@ -115,6 +119,7 @@
                         <TextBlock Style="{StaticResource Text.Label}" Margin="0,14,0,6" Text="{l:T Field.Sequence}" />
                         <TextBox x:Name="SequenceBox" FontFamily="{StaticResource Font.Mono}" c:UI.Placeholder="{}{USERNAME}{TAB}{PASSWORD}{ENTER}" TextChanged="Any_Changed" />
                         <TextBlock Style="{StaticResource Text.Muted}" Margin="0,6,0,0" Text="{l:T Editor.SequenceHelp}" />
+                        <TextBlock Style="{StaticResource Text.Muted}" Margin="0,6,0,0" Text="{l:T Editor.PinHint}" />
                     </StackPanel>
                 </Border>
             </StackPanel>

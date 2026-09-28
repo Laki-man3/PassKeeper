@@ -49,6 +49,11 @@ public partial class SettingsDialog : DialogBase
         Submit.IsChecked = Settings.SubmitAfterFill;
         Compatible.IsChecked = Settings.CompatibleTyping;
         DataPath.Text = App.Instance.DataDirectory;
+        AutoLock.Minimum = TimeSpan.FromSeconds(AppSettings.MinAutoLockSeconds);
+        AutoLock.Value = TimeSpan.FromSeconds(Settings.AutoLockSeconds);
+        UninstallButton.Visibility = !AppPaths.IsPortable && (AppPaths.IsUserInstall || AppPaths.IsMachineInstall) &&
+                                     File.Exists(Path.Combine(AppPaths.ExeDirectory, Shared.InstallLayout.UninstallerName))
+            ? Visibility.Visible : Visibility.Collapsed;
         FillCombos();
         UpdateAbout();
         _loading = false;
@@ -56,12 +61,6 @@ public partial class SettingsDialog : DialogBase
 
     private void FillCombos()
     {
-        AutoLock.Items.Clear();
-        foreach (var m in AppSettings.AutoLockChoices)
-            AutoLock.Items.Add(new ComboBoxItem { Content = FormatMinutes(m), Tag = m });
-        AutoLock.SelectedItem = AutoLock.Items.Cast<ComboBoxItem>().FirstOrDefault(i => (int)i.Tag == Settings.AutoLockMinutes)
-                                ?? AutoLock.Items.Cast<ComboBoxItem>().First(i => (int)i.Tag == 480);
-
         ClipboardClear.Items.Clear();
         foreach (var s in AppSettings.ClipboardChoices)
             ClipboardClear.Items.Add(new ComboBoxItem { Content = s == 0 ? Loc.T("Settings.Never") : Loc.F("Settings.Seconds", s), Tag = s });
@@ -73,12 +72,6 @@ public partial class SettingsDialog : DialogBase
             KeyDelay.Items.Add(new ComboBoxItem { Content = Loc.F("Settings.Milliseconds", ms), Tag = ms });
         KeyDelay.SelectedItem = KeyDelay.Items.Cast<ComboBoxItem>().FirstOrDefault(i => (int)i.Tag == Settings.KeystrokeDelayMs) ?? KeyDelay.Items[1];
     }
-
-    private static string FormatMinutes(int minutes) => minutes switch
-    {
-        < 60 => Loc.F("Settings.Minutes", minutes),
-        _ => Loc.F("Settings.Hours", minutes / 60) + (minutes == 480 ? " " + Loc.T("Settings.Recommended") : ""),
-    };
 
     private void UpdateAbout()
     {
@@ -129,7 +122,7 @@ public partial class SettingsDialog : DialogBase
         Settings.SmartSuggestions = Suggestions.IsChecked == true;
         Settings.SubmitAfterFill = Submit.IsChecked == true;
         Settings.CompatibleTyping = Compatible.IsChecked == true;
-        if (AutoLock.SelectedItem is ComboBoxItem { Tag: int minutes }) Settings.AutoLockMinutes = minutes;
+        Settings.AutoLockSeconds = (int)AutoLock.EffectiveValue.TotalSeconds;
         if (ClipboardClear.SelectedItem is ComboBoxItem { Tag: int seconds }) Settings.ClipboardClearSeconds = seconds;
         if (KeyDelay.SelectedItem is ComboBoxItem { Tag: int delay }) Settings.KeystrokeDelayMs = delay;
         Settings.Save();
@@ -184,6 +177,12 @@ public partial class SettingsDialog : DialogBase
         view.Done += () => dialog.Close(true);
         dialog.Content = view;
         await App.Instance.Main.ShowDialogAsync(dialog);
+    }
+
+    private void Uninstall_Click(object sender, RoutedEventArgs e)
+    {
+        if (Program.StartUninstaller(quiet: false) != 0)
+            App.Instance.Main.ShowToast(Loc.F("Common.ErrorFormat", Shared.InstallLayout.UninstallerName), error: true);
     }
 
     private void OpenFolder_Click(object sender, RoutedEventArgs e) =>

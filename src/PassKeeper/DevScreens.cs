@@ -15,7 +15,7 @@ namespace PassKeeper;
 /// </summary>
 internal static class DevScreens
 {
-    public static async void Run(string outputDir)
+    public static async void Run(string outputDir, string? onlyLanguage)
     {
         var app = App.Instance;
         app.SuppressAutoNavigation = true;
@@ -30,7 +30,7 @@ internal static class DevScreens
 
         try
         {
-            foreach (var lang in new[] { "ru", "en" })
+            foreach (var lang in onlyLanguage is "ru" or "en" ? [onlyLanguage] : new[] { "ru", "en" })
             {
                 Loc.I.Language = lang;
                 foreach (var theme in new[] { "dark", "light" })
@@ -62,7 +62,8 @@ internal static class DevScreens
         {
             main.Navigate(new SetupView());
             await Snap(main, dir, $"01-setup-{suffix}");
-            await Task.Run(() => app.Vault.Create("Анна", "Correct-Horse-Battery-9"));
+            var name = Loc.I.IsRussian ? "Анна" : "Alex";
+            await Task.Run(() => app.Vault.Create(name, "Correct-Horse-Battery-9"));
             main.Navigate(new PinSetupView(mandatory: true));
             await Snap(main, dir, $"02-pin-{suffix}");
             await Task.Run(() => app.Vault.SetPin("482913"));
@@ -100,7 +101,9 @@ internal static class DevScreens
         await Dialog(main, new ExportDialog(), dir, $"10-export-{suffix}");
 
         // Floating autofill windows.
-        var target = new TargetWindow { Title = "Вход — Яндекс ID", ProcessName = "chrome", IsBrowser = true, Url = "https://passport.yandex.ru/auth" };
+        var target = Loc.I.IsRussian
+            ? new TargetWindow { Title = "Вход — Яндекс ID", ProcessName = "chrome", IsBrowser = true, Url = "https://passport.yandex.ru/auth" }
+            : new TargetWindow { Title = "Sign in to GitHub", ProcessName = "chrome", IsBrowser = true, Url = "https://github.com/login" };
         var matches = Core.Matching.EntryMatcher.Match(app.Vault.ActiveEntries, target.ToContext());
         var popup = new Windows.SuggestionPopup();
         popup.Fill(matches.Select(m => m.Entry).ToList(), target.Describe());
@@ -112,7 +115,7 @@ internal static class DevScreens
         host.Close();
 
         var picker = Windows.AutoTypePickerWindow.CreateForPreview(
-            new TargetWindow { Title = "Удалённый рабочий стол", ProcessName = "mstsc" }, [], app.Vault.ActiveEntries);
+            new TargetWindow { Title = Loc.I.IsRussian ? "Удалённый рабочий стол" : "Remote Desktop Connection", ProcessName = "mstsc" }, [], app.Vault.ActiveEntries);
         picker.Left = -30000;
         picker.Top = -30000;
         picker.ShowActivated = false;
@@ -131,7 +134,32 @@ internal static class DevScreens
     private static void Seed(App app)
     {
         var now = DateTime.UtcNow;
-        var entries = new List<VaultEntry>
+        var entries = Loc.I.IsRussian ? SampleRu() : SampleEn();
+        foreach (var e in entries)
+        {
+            e.CreatedUtc = now.AddDays(-Random.Shared.Next(1, 300));
+            e.ModifiedUtc = now.AddDays(-Random.Shared.Next(0, 30));
+        }
+        app.Vault.AddRange(entries);
+    }
+
+    private static List<VaultEntry> SampleEn() =>
+    [
+        new() { Title = "GitHub", Username = "alex.morgan", Password = "k7#Qm2!vRz9@Lp4x", Url = "https://github.com", Folder = "Work", Favorite = true,
+            Totp = "JBSWY3DPEHPK3PXP", Email = "alex.morgan@example.com", Notes = "Recovery codes are in the safe.",
+            CustomFields = [new CustomField { Name = "Security question", Value = "Biscuit", Protected = true }] },
+        new() { Title = "Corporate VPN", Username = "amorgan", Password = "Vpn!Office#77", Folder = "Work", WindowPatterns = ["csc_ui", "vpnui"] },
+        new() { Title = "Online banking", Username = "alex_m", Password = "qwerty123", Url = "https://bank.example.com", Folder = "Finance", Favorite = true },
+        new() { Title = "GitLab (corporate)", Username = "a.morgan", Password = "Tr0ub4dor&3", Url = "https://gitlab.corp.local", Folder = "Work", SecretKey = "glpat-xxxxxxxxxxxxxxxxxxxx" },
+        new() { Title = "Personal mail", Username = "alex.morgan@example.com", Password = "Gu$-2026-secure!", Url = "https://mail.example.com", Folder = "Personal", Email = "alex.morgan@example.com" },
+        new() { Title = "Remote desktop", Username = @"CORP\amorgan", Password = "Rdp-Desk-2026", Folder = "Work", WindowPatterns = ["mstsc"] },
+        new() { Title = "Home Wi-Fi", Password = "HomeNet-5G-2026", Notes = "SSID: Morgan_5G", Folder = "Personal" },
+        new() { Title = "Cloud console", Username = "alex.morgan", Password = "Tr0ub4dor&3", Url = "https://console.example.com", Phone = "+1 555 010 0199" },
+    ];
+
+    private static List<VaultEntry> SampleRu()
+    {
+        return new List<VaultEntry>
         {
             new() { Title = "Госуслуги", Username = "+7 912 345-67-89", Password = "Gu$-2026-secure!", Url = "https://esia.gosuslugi.ru", Folder = "Личное", Favorite = true, Phone = "+7 912 345-67-89" },
             new() { Title = "Почта Яндекс", Username = "anna.petrova@yandex.ru", Password = "k7#Qm2!vRz9@Lp4x", Url = "https://passport.yandex.ru", Folder = "Личное", Email = "anna.petrova@yandex.ru",
@@ -143,12 +171,6 @@ internal static class DevScreens
             new() { Title = "Wi-Fi дома", Password = "HomeNet-5G-2026", Notes = "SSID: Petrov_5G" },
             new() { Title = "GitHub", Username = "annapetrova", Password = "Tr0ub4dor&3", Url = "https://github.com", Totp = "JBSWY3DPEHPK3PXP" },
         };
-        foreach (var e in entries)
-        {
-            e.CreatedUtc = now.AddDays(-Random.Shared.Next(1, 300));
-            e.ModifiedUtc = now.AddDays(-Random.Shared.Next(0, 30));
-        }
-        app.Vault.AddRange(entries);
     }
 
     private static async Task Snap(Window window, string dir, string name)

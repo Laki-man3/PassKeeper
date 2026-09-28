@@ -65,13 +65,11 @@
                 <TextBlock Style="{StaticResource Text.Label}" Text="{l:T Settings.Security}" />
                 <Border Style="{StaticResource SectionCard}">
                     <StackPanel>
-                        <Grid Style="{StaticResource SettingRow}">
-                            <StackPanel Margin="0,0,200,0">
-                                <TextBlock Text="{l:T Settings.AutoLock}" />
-                                <TextBlock Style="{StaticResource Text.Muted}" Text="{l:T Settings.AutoLockHint}" />
-                            </StackPanel>
-                            <ComboBox x:Name="AutoLock" Width="180" HorizontalAlignment="Right" VerticalAlignment="Center" SelectionChanged="Simple_Changed" />
-                        </Grid>
+                        <StackPanel Margin="0,0,0,18">
+                            <TextBlock Text="{l:T Settings.AutoLock}" />
+                            <TextBlock Style="{StaticResource Text.Muted}" Text="{l:T Settings.AutoLockHint}" TextWrapping="Wrap" />
+                            <c:DurationPicker x:Name="AutoLock" Margin="0,14,0,0" ValueChanged="Simple_Changed" />
+                        </StackPanel>
                         <Grid Style="{StaticResource SettingRow}">
                             <StackPanel Margin="0,0,200,0">
                                 <TextBlock Text="{l:T Settings.Clipboard}" />
@@ -147,6 +145,8 @@
                             <TextBlock x:Name="Version" FontWeight="SemiBold" FontSize="14" />
                             <TextBlock x:Name="InstallMode" Style="{StaticResource Text.Muted}" Margin="0,2,0,0" />
                             <TextBlock Style="{StaticResource Text.Secondary}" FontSize="12.5" Margin="0,8,0,0" Text="{l:T Settings.AboutText}" />
+                            <Button x:Name="UninstallButton" Style="{StaticResource Btn.Link}" HorizontalAlignment="Left" Margin="-8,8,0,0"
+                                    Content="{l:T Settings.Uninstall}" Click="Uninstall_Click" Visibility="Collapsed" />
                         </StackPanel>
                     </Grid>
                 </Border>

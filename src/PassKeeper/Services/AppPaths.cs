@@ -26,4 +26,13 @@ public static class AppPaths
 
     public static bool IsUserInstall =>
         InstallLayout.SamePath(InstallLayout.ReadInstallLocation(false), ExeDirectory);
+
+    /// <summary>UI language chosen in the installer ("ru"/"en"), if this copy is installed.</summary>
+    public static string? InstallerLanguage()
+    {
+        var machine = IsMachineInstall;
+        if (!machine && !IsUserInstall) return null;
+        var lang = InstallLayout.ReadInstallerValue(machine, InstallLayout.LanguageValue) as string;
+        return lang is "ru" or "en" ? lang : null;
+    }
 }

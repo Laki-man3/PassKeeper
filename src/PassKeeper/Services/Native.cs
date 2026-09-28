@@ -156,6 +156,30 @@ internal static class Native
     [DllImport("dwmapi.dll")]
     public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
 
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern int GetClassName(IntPtr hWnd, StringBuilder className, int maxCount);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr OpenProcess(uint access, [MarshalAs(UnmanagedType.Bool)] bool inherit, uint processId);
+
+    [DllImport("kernel32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool CloseHandle(IntPtr handle);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool OpenProcessToken(IntPtr process, uint access, out IntPtr token);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetTokenInformation(IntPtr token, int infoClass, IntPtr info, int length, out int returnLength);
+
+    [DllImport("advapi32.dll")]
+    private static extern IntPtr GetSidSubAuthorityCount(IntPtr sid);
+
+    [DllImport("advapi32.dll")]
+    private static extern IntPtr GetSidSubAuthority(IntPtr sid, uint index);
+
     public static string GetWindowTitle(IntPtr hwnd)
     {
         var len = GetWindowTextLength(hwnd);
@@ -163,6 +187,67 @@ internal static class Native
         var sb = new StringBuilder(len + 1);
         GetWindowText(hwnd, sb, sb.Capacity);
         return sb.ToString();
+    }
+
+    public static string GetWindowClass(IntPtr hwnd)
+    {
+        var sb = new StringBuilder(256);
+        return GetClassName(hwnd, sb, sb.Capacity) > 0 ? sb.ToString() : "";
+    }
+
+    /// <summary>
+    /// Mandatory integrity level of a process (0x2000 medium, 0x3000 high, 0x4000 system).
+    /// A token we may not open belongs to an elevated or system process: reported as system.
+    /// </summary>
+    public static int GetIntegrityLevel(uint processId)
+    {
+        const uint processQueryLimitedInformation = 0x1000;
+        const uint tokenQuery = 0x0008;
+        const int tokenIntegrityLevel = 25;
+        const int system = 0x4000;
+        var process = OpenProcess(processQueryLimitedInformation, false, processId);
+        if (process == IntPtr.Zero) return system;
+        try
+        {
+            if (!OpenProcessToken(process, tokenQuery, out var token)) return system;
+            try
+            {
+                GetTokenInformation(token, tokenIntegrityLevel, IntPtr.Zero, 0, out var size);
+                if (size <= 0) return system;
+                var buffer = Marshal.AllocHGlobal(size);
+                try
+                {
+                    if (!GetTokenInformation(token, tokenIntegrityLevel, buffer, size, out _)) return system;
+                    var sid = Marshal.ReadIntPtr(buffer); // TOKEN_MANDATORY_LABEL.Label.Sid
+                    var count = Marshal.ReadByte(GetSidSubAuthorityCount(sid));
+                    return Marshal.ReadInt32(GetSidSubAuthority(sid, (uint)(count - 1)));
+                }
+                finally
+                {
+                    Marshal.FreeHGlobal(buffer);
+                }
+            }
+            finally
+            {
+                CloseHandle(token);
+            }
+        }
+        finally
+        {
+            CloseHandle(process);
+        }
+    }
+
+    private static readonly Lazy<int> OwnIntegrity = new(() => GetIntegrityLevel((uint)Environment.ProcessId));
+
+    /// <summary>
+    /// Windows (UIPI) silently drops simulated input sent to a process with a higher integrity level —
+    /// an application started "as administrator" or a system process.
+    /// </summary>
+    public static bool IsInputBlocked(IntPtr hwnd)
+    {
+        GetWindowThreadProcessId(hwnd, out var pid);
+        return pid != 0 && GetIntegrityLevel(pid) > OwnIntegrity.Value;
     }
 
     /// <summary>Milliseconds since the last keyboard/mouse input in the session.</summary>

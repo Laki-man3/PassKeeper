@@ -15,6 +15,9 @@ public partial class SetupView : UserControl
         InitializeComponent();
         UserName.Text = Environment.UserName;
         (Loc.I.IsRussian ? LangRu : LangEn).IsChecked = true;
+        // An all-users autostart (set by the administrator) already covers this user.
+        if (AutostartService.IsEnabledForMachine()) Autostart.Visibility = Visibility.Collapsed;
+        else Autostart.IsChecked = AutostartService.DefaultForNewProfile();
         Master.EnterPressed += (_, _) => Confirm.FocusInput();
         Confirm.EnterPressed += (_, _) => Create_Click(this, new RoutedEventArgs());
         Loaded += (_, _) => Master.FocusInput();
@@ -45,9 +48,9 @@ public partial class SetupView : UserControl
         {
             var vault = App.Instance.Vault;
             await Task.Run(() => vault.Create(name, master));
-            if (Autostart.IsChecked == true)
+            if (Autostart.Visibility == Visibility.Visible)
             {
-                try { AutostartService.SetForUser(true); }
+                try { AutostartService.SetForUser(Autostart.IsChecked == true); }
                 catch (Exception) { /* policy may forbid it; the setting can be changed later */ }
             }
             // Vault.StateChanged makes the app continue with the mandatory PIN setup.

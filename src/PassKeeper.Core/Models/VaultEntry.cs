@@ -35,6 +35,21 @@ public sealed class VaultEntry
 
     public bool IsDeleted => DeletedUtc.HasValue;
 
+    private static readonly string[] PinFieldNames = ["pin", "пин", "pin-код", "пин-код", "pin code", "token pin", "pin токена"];
+
+    /// <summary>
+    /// Smart-card / token PIN: a custom field named "PIN" (also "ПИН", "PIN-код", "Token PIN"), otherwise the password.
+    /// </summary>
+    public string PinCode()
+    {
+        foreach (var field in CustomFields)
+        {
+            var name = field.Name.Trim().Replace('\u2011', '-').Replace('\u2010', '-').ToLowerInvariant();
+            if (PinFieldNames.Contains(name) && field.Value.Length > 0) return field.Value;
+        }
+        return Password;
+    }
+
     public IEnumerable<string> AllUrls()
     {
         if (!string.IsNullOrWhiteSpace(Url)) yield return Url;

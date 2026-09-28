@@ -15,7 +15,7 @@ public sealed class AutoTypeException(string message) : Exception(message);
 
 /// <summary>
 /// Compiles KeePass-style sequences: <c>{USERNAME}{TAB}{PASSWORD}{ENTER}</c>.
-/// Placeholders: TITLE, USERNAME/LOGIN, PASSWORD, URL, EMAIL, PHONE, KEY, TOTP, NOTES, S:&lt;field&gt;.
+/// Placeholders: TITLE, USERNAME/LOGIN, PASSWORD, PIN, URL, EMAIL, PHONE, KEY, TOTP, NOTES, S:&lt;field&gt;.
 /// Keys: TAB, ENTER, SPACE, BACKSPACE/BS, DELETE/DEL, ESC, UP, DOWN, LEFT, RIGHT, HOME, END, PGUP, PGDN,
 /// INSERT, F1–F24, CLEARFIELD. Commands: {DELAY 500}, {DELAY=30} (keystroke delay), {TAB 3} (repeat).
 /// Literal braces: {{} and {}}.
@@ -125,6 +125,7 @@ public static class AutoTypeSequence
             case "USERNAME" or "USER" or "LOGIN":
                 return string.IsNullOrEmpty(e.Username) ? e.Email : e.Username;
             case "PASSWORD": return e.Password;
+            case "PIN": return e.PinCode();
             case "URL": return e.Url;
             case "EMAIL": return e.Email;
             case "PHONE": return e.Phone;

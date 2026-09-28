@@ -107,20 +107,43 @@ namespace PassKeeper.Setup
             File.WriteAllLines(Path.Combine(dir, InstallLayout.ManifestFileName), installed);
 
             progress(0.9, Texts.T("StepShortcuts"));
-            ShellLink.Create(InstallLayout.StartMenuShortcut(o.AllUsers), exe, "", Texts.T("ShortcutDescription"));
+            var uninstaller = Path.Combine(dir, InstallLayout.UninstallerName);
+            CreateStartMenu(o.AllUsers, exe, uninstaller);
             var desktop = InstallLayout.DesktopShortcut(o.AllUsers);
             if (o.DesktopShortcut) ShellLink.Create(desktop, exe, "", Texts.T("ShortcutDescription"));
             else if (File.Exists(desktop)) File.Delete(desktop);
 
             progress(0.95, Texts.T("StepRegistry"));
-            RegisterUninstall(o.AllUsers, dir, exe, installed);
+            RegisterUninstall(o.AllUsers, dir, exe, uninstaller, installed);
             using (var root = InstallLayout.OpenRoot(o.AllUsers))
-            using (var run = root.CreateSubKey(InstallLayout.RunKeyPath))
             {
-                if (o.Autostart) run.SetValue(InstallLayout.RunValueName, "\"" + exe + "\" --minimized");
-                else if (o.AllUsers) run.DeleteValue(InstallLayout.RunValueName, false);
+                using (var run = root.CreateSubKey(InstallLayout.RunKeyPath))
+                {
+                    if (o.Autostart) run.SetValue(InstallLayout.RunValueName, "\"" + exe + "\" --minimized");
+                    else run.DeleteValue(InstallLayout.RunValueName, false);
+                }
+                // The first-run screen of the app offers autostart again: it starts from this choice.
+                using (var app = root.CreateSubKey(InstallLayout.AppKeyPath))
+                {
+                    app.SetValue(InstallLayout.AutostartPreferenceValue, o.Autostart ? 1 : 0, RegistryValueKind.DWord);
+                    app.SetValue(InstallLayout.LanguageValue, Texts.Language);
+                }
             }
             progress(1, Texts.T("StepDone"));
+        }
+
+        private static void CreateStartMenu(bool allUsers, string exe, string uninstaller)
+        {
+            var legacy = InstallLayout.LegacyStartMenuShortcut(allUsers);
+            if (File.Exists(legacy)) File.Delete(legacy);
+            var folder = InstallLayout.StartMenuFolder(allUsers);
+            if (System.IO.Directory.Exists(folder))
+            {
+                foreach (var old in System.IO.Directory.GetFiles(folder, "*.lnk")) File.Delete(old);
+            }
+            ShellLink.Create(InstallLayout.StartMenuShortcut(allUsers), exe, "", Texts.T("ShortcutDescription"));
+            if (File.Exists(uninstaller))
+                ShellLink.Create(Path.Combine(folder, Texts.T("UninstallShortcut") + ".lnk"), uninstaller, "", Texts.T("UninstallShortcut"));
         }
 
         private static List<string> ReadManifest(string dir)
@@ -196,7 +219,7 @@ namespace PassKeeper.Setup
             entry.ExtractToFile(target, true);
         }
 
-        private static void RegisterUninstall(bool allUsers, string dir, string exe, List<string> files)
+        private static void RegisterUninstall(bool allUsers, string dir, string exe, string uninstaller, List<string> files)
         {
             long size = 0;
             foreach (var f in files)
@@ -211,8 +234,8 @@ namespace PassKeeper.Setup
                 key.SetValue("Publisher", InstallLayout.Publisher);
                 key.SetValue("DisplayIcon", exe + ",0");
                 key.SetValue("InstallLocation", dir);
-                key.SetValue("UninstallString", "\"" + exe + "\" --uninstall");
-                key.SetValue("QuietUninstallString", "\"" + exe + "\" --uninstall --quiet");
+                key.SetValue("UninstallString", "\"" + uninstaller + "\"");
+                key.SetValue("QuietUninstallString", "\"" + uninstaller + "\" /S");
                 key.SetValue("InstallDate", DateTime.Now.ToString("yyyyMMdd"));
                 key.SetValue("EstimatedSize", (int)(size / 1024), RegistryValueKind.DWord);
                 key.SetValue("NoModify", 1, RegistryValueKind.DWord);
@@ -222,7 +245,7 @@ namespace PassKeeper.Setup
         }
 
         /// <summary>Asks a running PassKeeper of the current user to exit and waits for processes from the target folder.</summary>
-        private static void StopRunningInstance(string exe)
+        internal static void StopRunningInstance(string exe)
         {
             try
             {

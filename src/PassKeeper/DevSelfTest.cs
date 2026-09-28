@@ -25,6 +25,7 @@ internal static class DevSelfTest
         try
         {
             await TestOwnWindow(L);
+            TestIntegrity(L);
             if (!string.IsNullOrEmpty(browser)) await TestBrowser(browser, L);
         }
         catch (Exception ex)
@@ -33,6 +34,18 @@ internal static class DevSelfTest
         }
         File.WriteAllText(reportPath, log.ToString(), Encoding.UTF8);
         App.Instance.Shutdown();
+    }
+
+    /// <summary>UIPI detection: this process vs. a SYSTEM process of the session (winlogon).</summary>
+    private static void TestIntegrity(Action<string> L)
+    {
+        L("== integrity levels");
+        var own = Native.GetIntegrityLevel((uint)Environment.ProcessId);
+        L($"own process: 0x{own:X4}");
+        foreach (var p in Process.GetProcessesByName("winlogon"))
+        {
+            using (p) L($"winlogon {p.Id}: 0x{Native.GetIntegrityLevel((uint)p.Id):X4} (input blocked: {Native.GetIntegrityLevel((uint)p.Id) > own})");
+        }
     }
 
     private static async Task TestOwnWindow(Action<string> L)

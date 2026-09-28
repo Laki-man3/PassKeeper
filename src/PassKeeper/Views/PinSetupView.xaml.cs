@@ -25,8 +25,17 @@ public partial class PinSetupView : UserControl
         {
             if (e.Key == Key.Enter) { Confirm.Focus(); e.Handled = true; }
         };
-        Loaded += (_, _) => Pin.Focus();
+        Loaded += (_, _) =>
+        {
+            UpdateSubtitle(null, EventArgs.Empty);
+            Loc.I.LanguageChanged += UpdateSubtitle;
+            Pin.Focus();
+        };
+        Unloaded += (_, _) => Loc.I.LanguageChanged -= UpdateSubtitle;
     }
+
+    private void UpdateSubtitle(object? sender, EventArgs e) =>
+        Subtitle.Text = Loc.F("Pin.Subtitle", Loc.Duration(TimeSpan.FromSeconds(App.Instance.Settings.AutoLockSeconds)));
 
     public event Action? Done;
 

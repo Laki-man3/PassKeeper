@@ -4,14 +4,6 @@
              xmlns:l="clr-namespace:PassKeeper.Localization"
              xmlns:c="clr-namespace:PassKeeper.Controls">
     <Grid Background="{DynamicResource Brush.PageGlow}">
-
-        <Border Style="{StaticResource SegmentHost}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,48,28,0">
-            <StackPanel Orientation="Horizontal">
-                <RadioButton x:Name="LangRu" Style="{StaticResource Segment}" Content="Русский" GroupName="SetupLang" Checked="Lang_Checked" />
-                <RadioButton x:Name="LangEn" Style="{StaticResource Segment}" Content="English" GroupName="SetupLang" Checked="Lang_Checked" />
-            </StackPanel>
-        </Border>
-
         <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,40,0,0">
             <StackPanel Width="420" VerticalAlignment="Center" Margin="0,24,0,32">
                 <Image Source="{StaticResource LogoImage}" Width="68" Height="68" HorizontalAlignment="Left" />
@@ -28,7 +20,7 @@
                 <TextBlock Style="{StaticResource Text.Label}" Margin="0,14,0,6" Text="{l:T Setup.Confirm}" />
                 <c:SecretBox x:Name="Confirm" Placeholder="{l:T Setup.ConfirmPlaceholder}" />
 
-                <CheckBox x:Name="Autostart" Margin="0,18,0,0" IsChecked="True" Content="{l:T Setup.Autostart}" />
+                <CheckBox x:Name="Autostart" Margin="0,18,0,0" Content="{l:T Setup.Autostart}" />
 
                 <Border Margin="0,18,0,0" Padding="12,10" CornerRadius="10" Background="{DynamicResource Brush.WarningSoft}">
                     <Grid>
@@ -56,5 +48,13 @@
                 </StackPanel>
             </StackPanel>
         </ScrollViewer>
+
+        <!-- Declared after the scroll viewer: it covers the whole page and would otherwise take the clicks. -->
+        <Border Style="{StaticResource SegmentHost}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,48,28,0">
+            <StackPanel Orientation="Horizontal">
+                <RadioButton x:Name="LangRu" Style="{StaticResource Segment}" Content="Русский" GroupName="SetupLang" Checked="Lang_Checked" />
+                <RadioButton x:Name="LangEn" Style="{StaticResource Segment}" Content="English" GroupName="SetupLang" Checked="Lang_Checked" />
+            </StackPanel>
+        </Border>
     </Grid>
 </UserControl>

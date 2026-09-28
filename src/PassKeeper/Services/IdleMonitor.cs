@@ -9,7 +9,8 @@ namespace PassKeeper.Services;
 /// </summary>
 public sealed class IdleMonitor : IDisposable
 {
-    private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(15) };
+    // One-second checks: the period is set to the second. GetLastInputInfo is a cheap call.
+    private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(1) };
     private DateTime _lastActivityUtc = DateTime.UtcNow;
     private uint _lastInputTick = Native.GetLastInputTick();
 

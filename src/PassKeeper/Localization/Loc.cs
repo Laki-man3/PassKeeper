@@ -47,6 +47,17 @@ public sealed class Loc : INotifyPropertyChanged
 
     public static string F(string key, params object[] args) => string.Format(CultureInfo.CurrentCulture, T(key), args);
 
+    /// <summary>"8 ч", "1 ч 30 мин", "45 с" / "8 h", "1 h 30 min".</summary>
+    public static string Duration(TimeSpan span)
+    {
+        var parts = new List<string>();
+        var hours = (int)span.TotalHours;
+        if (hours > 0) parts.Add(F("Settings.Hours", hours));
+        if (span.Minutes > 0) parts.Add(F("Settings.Minutes", span.Minutes));
+        if (span.Seconds > 0 || parts.Count == 0) parts.Add(F("Settings.Seconds", span.Seconds));
+        return string.Join(" ", parts);
+    }
+
     /// <summary>"1 запись", "2 записи", "5 записей" / "1 entry", "2 entries".</summary>
     public static string Plural(int n, string key)
     {

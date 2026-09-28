@@ -43,6 +43,13 @@ dotnet publish (Join-Path $root "src\PassKeeper\PassKeeper.csproj") -c $Configur
 Check "dotnet publish"
 Get-ChildItem $appDir -Recurse -Include *.pdb, *.xml | Remove-Item -Force
 
+Step "Building uninstaller"
+# The setup program without the embedded payload works as Uninstall.exe in the installation folder.
+$uninstallOut = Join-Path $artifacts "uninstall"
+dotnet build (Join-Path $root "src\PassKeeper.Setup\PassKeeper.Setup.csproj") -c $Configuration "-p:PayloadZip=none" --no-incremental -o $uninstallOut --nologo
+Check "uninstaller build"
+Copy-Item (Join-Path $uninstallOut "PassKeeper-Setup.exe") (Join-Path $appDir "Uninstall.exe")
+
 Step "Packing installer payload"
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $payload = Join-Path $artifacts "payload.zip"
@@ -50,14 +57,14 @@ $payload = Join-Path $artifacts "payload.zip"
 
 Step "Building installer"
 $setupOut = Join-Path $artifacts "setup"
-dotnet build (Join-Path $root "src\PassKeeper.Setup\PassKeeper.Setup.csproj") -c $Configuration "-p:PayloadZip=$payload" -o $setupOut --nologo
+dotnet build (Join-Path $root "src\PassKeeper.Setup\PassKeeper.Setup.csproj") -c $Configuration "-p:PayloadZip=$payload" --no-incremental -o $setupOut --nologo
 Check "setup build"
 Copy-Item (Join-Path $setupOut "PassKeeper-Setup.exe") (Join-Path $dist "PassKeeper-Setup-$version.exe")
 
 Step "Portable package"
 $portable = Join-Path $artifacts "portable\PassKeeper"
 New-Item -ItemType Directory -Force $portable | Out-Null
-Copy-Item "$appDir\*" $portable -Recurse
+Copy-Item "$appDir\*" $portable -Recurse -Exclude "Uninstall.exe"
 Set-Content -Path (Join-Path $portable "portable.txt") -Encoding UTF8 -Value @"
 PassKeeper portable mode: the vault and settings are stored in the Data folder next to PassKeeper.exe.
 Портативный режим: хранилище и настройки находятся в папке Data рядом с PassKeeper.exe.
