@@ -46,6 +46,7 @@ public partial class SettingsDialog : DialogBase
         LockOnWindowsLock.IsChecked = Settings.LockOnWindowsLock;
         Hotkey.Text = Settings.AutoTypeHotkey;
         Suggestions.IsChecked = Settings.SmartSuggestions;
+        AutoLogin.IsChecked = Settings.AutoLogin;
         Submit.IsChecked = Settings.SubmitAfterFill;
         Compatible.IsChecked = Settings.CompatibleTyping;
         DataPath.Text = App.Instance.DataDirectory;
@@ -120,6 +121,7 @@ public partial class SettingsDialog : DialogBase
         Settings.MinimizeToTray = MinimizeToTray.IsChecked == true;
         Settings.LockOnWindowsLock = LockOnWindowsLock.IsChecked == true;
         Settings.SmartSuggestions = Suggestions.IsChecked == true;
+        Settings.AutoLogin = AutoLogin.IsChecked == true;
         Settings.SubmitAfterFill = Submit.IsChecked == true;
         Settings.CompatibleTyping = Compatible.IsChecked == true;
         Settings.AutoLockSeconds = (int)AutoLock.EffectiveValue.TotalSeconds;

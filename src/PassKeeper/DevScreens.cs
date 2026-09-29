@@ -89,16 +89,40 @@ internal static class DevScreens
         var list = (System.Windows.Controls.ListBox)vault.FindName("EntryList");
         list.SelectedIndex = 1;
         await Snap(main, dir, $"05-vault-details-{suffix}");
+        list.SelectedItem = list.Items.Cast<ViewModels.EntryItem>().First(i => i.Entry.EffectiveCategory == EntryCategory.Remote && i.Entry.AutoLogin);
+        await Snap(main, dir, $"05b-vault-vpn-{suffix}");
+        list.SelectedIndex = 1;
 
         var details = (System.Windows.Controls.ContentControl)vault.FindName("DetailHost");
         var entry = ((ViewModels.EntryItem)list.SelectedItem).Entry;
         details.Content = new EntryEditorView(entry.Clone(), false, app.Vault.Folders());
         await Snap(main, dir, $"06-editor-{suffix}");
 
+        var vpn = app.Vault.ActiveEntries.First(e => e.EffectiveCategory == EntryCategory.Remote);
+        var vpnEditor = new EntryEditorView(vpn.Clone(), false, app.Vault.Folders());
+        details.Content = vpnEditor;
+        await Snap(main, dir, $"06b-editor-vpn-{suffix}");
+        vpnEditor.ShowAdvanced();
+        ((System.Windows.Controls.ScrollViewer)vpnEditor.FindName("Scroll")).ScrollToEnd();
+        await Snap(main, dir, $"06c-editor-autotype-{suffix}");
+
+        // What Ctrl+Alt+A opens in a client window that has no entry yet.
+        var detected = new DetectedWindow { App = Core.AutoType.KnownApps.Find("checkpoint"), ProcessName = "TrGUI", Title = "Check Point Endpoint Security" };
+        var detectEditor = new EntryEditorView(new VaultEntry { Category = EntryCategory.Remote, AutoLogin = true }, true, app.Vault.Folders());
+        detectEditor.ApplyClient(detected);
+        detectEditor.ShowDetection(detected, new SignInForm(true, true, true, false));
+        details.Content = detectEditor;
+        await Snap(main, dir, $"06d-editor-detected-{suffix}");
+        details.Content = null;
+
         await Dialog(main, new SettingsDialog(), dir, $"07-settings-{suffix}");
         await Dialog(main, new GeneratorDialog(pickMode: false), dir, $"08-generator-{suffix}");
         await Dialog(main, new ImportDialog(), dir, $"09-import-{suffix}");
         await Dialog(main, new ExportDialog(), dir, $"10-export-{suffix}");
+        var help = HelpDialog.Create("autologin");
+        _ = main.ShowDialogAsync(help);
+        await Snap(main, dir, $"13-help-{suffix}");
+        help.Close();
 
         // Floating autofill windows.
         var target = Loc.I.IsRussian
@@ -148,7 +172,10 @@ internal static class DevScreens
         new() { Title = "GitHub", Username = "alex.morgan", Password = "k7#Qm2!vRz9@Lp4x", Url = "https://github.com", Folder = "Work", Favorite = true,
             Totp = "JBSWY3DPEHPK3PXP", Email = "alex.morgan@example.com", Notes = "Recovery codes are in the safe.",
             CustomFields = [new CustomField { Name = "Security question", Value = "Biscuit", Protected = true }] },
-        new() { Title = "Corporate VPN", Username = "amorgan", Password = "Vpn!Office#77", Folder = "Work", WindowPatterns = ["csc_ui", "vpnui"] },
+        new() { Title = "Cisco Secure Client (AnyConnect)", Username = "amorgan", Password = "Vpn!Office#77", Folder = "Work", Url = "vpn.example.com",
+            Category = EntryCategory.Remote, AutoLogin = true, WindowPatterns = ["csc_ui.exe", "vpnui.exe", "Cisco Secure Client*", "Cisco AnyConnect*"] },
+        new() { Title = "Check Point Endpoint Security VPN", Username = "amorgan", Password = "Vpn!Office#77", Folder = "Work", Category = EntryCategory.Remote,
+            WindowPatterns = ["TrGUI.exe", "Check Point*"], CustomFields = [new CustomField { Name = "PIN", Value = "246810", Protected = true }] },
         new() { Title = "Online banking", Username = "alex_m", Password = "qwerty123", Url = "https://bank.example.com", Folder = "Finance", Favorite = true },
         new() { Title = "GitLab (corporate)", Username = "a.morgan", Password = "Tr0ub4dor&3", Url = "https://gitlab.corp.local", Folder = "Work", SecretKey = "glpat-xxxxxxxxxxxxxxxxxxxx" },
         new() { Title = "Personal mail", Username = "alex.morgan@example.com", Password = "Gu$-2026-secure!", Url = "https://mail.example.com", Folder = "Personal", Email = "alex.morgan@example.com" },
@@ -167,7 +194,10 @@ internal static class DevScreens
             new() { Title = "GitLab (корпоративный)", Username = "a.petrova", Password = "Tr0ub4dor&3", Url = "https://gitlab.corp.local", Folder = "Работа", SecretKey = "glpat-xxxxxxxxxxxxxxxxxxxx" },
             new() { Title = "1С:Предприятие", Username = "Петрова А.", Password = "1c-Buh-2026", Folder = "Работа", WindowPatterns = ["*1С:Предприятие*"] },
             new() { Title = "Сбербанк Онлайн", Username = "anna_p", Password = "qwerty123", Url = "https://online.sberbank.ru", Folder = "Финансы", Favorite = true },
-            new() { Title = "VPN офис", Username = "apetrova", Password = "Vpn!Office#77", Url = "vpn.corp.local", Folder = "Работа" },
+            new() { Title = "Cisco Secure Client (AnyConnect)", Username = "apetrova", Password = "Vpn!Office#77", Url = "vpn.corp.local", Folder = "Работа",
+                Category = EntryCategory.Remote, AutoLogin = true, WindowPatterns = ["csc_ui.exe", "vpnui.exe", "Cisco Secure Client*", "Cisco AnyConnect*"] },
+            new() { Title = "Check Point (Рутокен)", Username = "apetrova", Password = "Vpn!Office#77", Folder = "Работа", Category = EntryCategory.Remote,
+                WindowPatterns = ["TrGUI.exe", "Check Point*"], CustomFields = [new CustomField { Name = "PIN", Value = "246810", Protected = true }] },
             new() { Title = "Wi-Fi дома", Password = "HomeNet-5G-2026", Notes = "SSID: Petrov_5G" },
             new() { Title = "GitHub", Username = "annapetrova", Password = "Tr0ub4dor&3", Url = "https://github.com", Totp = "JBSWY3DPEHPK3PXP" },
         };

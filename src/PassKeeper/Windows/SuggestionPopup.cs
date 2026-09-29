@@ -81,6 +81,7 @@ public sealed class SuggestionPopup : Window
 
     public event Action<VaultEntry, LoginField>? EntryChosen;
     public event Action<LoginField>? UnlockRequested;
+    public event Action<LoginField>? CreateRequested;
 
     public bool IsShowingFor(LoginField field) => IsVisible && _field != null && _field.Window == field.Window;
 
@@ -118,6 +119,33 @@ public sealed class SuggestionPopup : Window
             var f = _field;
             HidePopup();
             if (f != null) UnlockRequested?.Invoke(f);
+        };
+        _items.Children.Add(button);
+        _subtitle.Text = Loc.F("Suggest.For", target.Describe());
+        _footer.Text = "";
+        Present(field.Bounds);
+    }
+
+    /// <summary>A program without an entry: offer to create one for this client (the fields are recognised).</summary>
+    public void ShowCreate(LoginField field, TargetWindow target, string clientName)
+    {
+        _field = field;
+        _items.Children.Clear();
+        var button = ItemShell(out var panel);
+        var icon = new TextBlock { Text = "\uE710", Style = (Style)FindResource("Icon"), FontSize = 16, Width = 30 };
+        icon.SetResourceReference(TextBlock.ForegroundProperty, "Brush.AccentText");
+        panel.Children.Add(icon);
+        var text = new StackPanel { Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, MaxWidth = 230 };
+        text.Children.Add(new TextBlock { Text = Loc.F("Suggest.Create", clientName), FontWeight = FontWeights.SemiBold, FontSize = 12.5, TextWrapping = TextWrapping.Wrap });
+        var hint = new TextBlock { Text = Loc.T("Suggest.CreateHint"), FontSize = 11.5, TextWrapping = TextWrapping.Wrap };
+        hint.SetResourceReference(TextBlock.ForegroundProperty, "Brush.TextMuted");
+        text.Children.Add(hint);
+        panel.Children.Add(text);
+        button.Click += (_, _) =>
+        {
+            var f = _field;
+            HidePopup();
+            if (f != null) CreateRequested?.Invoke(f);
         };
         _items.Children.Add(button);
         _subtitle.Text = Loc.F("Suggest.For", target.Describe());

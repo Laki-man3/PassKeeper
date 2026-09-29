@@ -13,8 +13,15 @@ public sealed class AutoTypeService
 {
     private readonly App _app;
     private bool _busy;
+    private int _typing;
 
     public AutoTypeService(App app) => _app = app;
+
+    /// <summary>Keystrokes are being sent right now (a second fill would interleave with them).</summary>
+    public bool IsTyping => Volatile.Read(ref _typing) > 0;
+
+    /// <summary>A window was filled (by the hotkey, a suggestion or after saving a new entry).</summary>
+    public event Action<IntPtr>? WindowFilled;
 
     private KeyboardSender CreateSender(IntPtr target) => new()
     {
@@ -34,6 +41,7 @@ public sealed class AutoTypeService
     {
         if (_busy) return;
         _busy = true;
+        Interlocked.Increment(ref _typing); // the user asked explicitly: automatic sign-in stands aside
         try
         {
             var hwnd = Native.GetForegroundWindow();
@@ -48,6 +56,17 @@ public sealed class AutoTypeService
             if (!_app.Vault.IsUnlocked && !await QuickUnlockWindow.ShowAsync(target.Describe())) return;
 
             var matches = EntryMatcher.Match(_app.Vault.ActiveEntries, target.ToContext());
+            if (matches.Count == 0 && !target.IsBrowser)
+            {
+                // A program nobody has an entry for: if it is a known client or shows a login form, create the entry
+                // for exactly this window instead of asking to pick one.
+                var form = await Task.Run(() => ClientDetector.InspectForm(hwnd));
+                if (field != null || form.Any || KnownApps.Match(target.ProcessName, target.Title) != null)
+                {
+                    _app.CreateEntryForWindow(hwnd, form);
+                    return;
+                }
+            }
             VaultEntry? entry;
             if (matches.Count == 1 || (matches.Count > 1 && matches[0].Score > matches[1].Score && matches[0].Score >= 95))
                 entry = matches[0].Entry;
@@ -79,6 +98,7 @@ public sealed class AutoTypeService
         finally
         {
             _busy = false;
+            Interlocked.Decrement(ref _typing);
         }
     }
 
@@ -86,6 +106,20 @@ public sealed class AutoTypeService
     public async Task TypeIntoPreviousWindowAsync(VaultEntry entry)
     {
         var main = _app.Main;
+        // A program entry: its window is found among the open ones, whichever window was used last.
+        if (entry.WindowPatterns.Count > 0)
+        {
+            var window = await Task.Run(() => ClientDetector.OpenWindows().FirstOrDefault(w =>
+                EntryMatcher.Match([entry], new TargetContext { WindowTitle = w.Title, ProcessName = w.ProcessName }).Any(m => m.Score >= 95)));
+            if (window != null)
+            {
+                main.WindowState = System.Windows.WindowState.Minimized;
+                await Task.Delay(250);
+                if (!await FillWindowAsync(entry, window.Handle, _app.Settings.SubmitAfterFill))
+                    _app.Tray?.ShowBalloon("PassKeeper", Loc.T("AutoType.NoForm"));
+                return;
+            }
+        }
         main.WindowState = System.Windows.WindowState.Minimized;
         await Task.Delay(450);
         var hwnd = Native.GetForegroundWindow();
@@ -96,6 +130,36 @@ public sealed class AutoTypeService
         }
         var target = await Task.Run(() => TargetDetector.Capture(hwnd, detectUrl: false));
         await TypeAsync(entry, target, AutoTypeSequence.EffectiveSequence(entry, _app.Settings.SubmitAfterFill));
+    }
+
+    /// <summary>
+    /// Brings the window forward and fills its login form: the focused field, otherwise the first password / PIN
+    /// field (its login field is filled from there) or login field. A custom sequence is typed from that field.
+    /// </summary>
+    public async Task<bool> FillWindowAsync(VaultEntry entry, IntPtr hwnd, bool submit)
+    {
+        if (!Native.IsWindow(hwnd)) return false;
+        Interlocked.Increment(ref _typing);
+        try
+        {
+            Native.ForceForeground(hwnd);
+            await Task.Delay(250);
+            var field = FocusedField(hwnd) ?? await Task.Run(() => FieldFinder.FirstSignInField(hwnd));
+            if (field != null) await Task.Run(() => FieldFinder.Focus(field.Element));
+            if (!string.IsNullOrWhiteSpace(entry.AutoTypeSequence))
+            {
+                var target = await Task.Run(() => TargetDetector.Capture(hwnd, detectUrl: false));
+                await TypeAsync(entry, target, entry.AutoTypeSequence);
+                return true;
+            }
+            if (field == null) return false;
+            await FillFieldAsync(entry, field, submit);
+            return true;
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _typing);
+        }
     }
 
     /// <summary>The sign-in field focused in the given window, if any (bounded: UI Automation may hang on a busy app).</summary>
@@ -163,6 +227,7 @@ public sealed class AutoTypeService
         }
         await Task.Delay(120);
         var sender = CreateSender(target.Handle);
+        Interlocked.Increment(ref _typing);
         try
         {
             await Task.Run(() =>
@@ -171,6 +236,7 @@ public sealed class AutoTypeService
                 sender.Execute(actions);
             });
             _app.Vault.MarkUsed(entry.Id);
+            WindowFilled?.Invoke(target.Handle);
         }
         catch (AutoTypeAbortedException)
         {
@@ -179,6 +245,10 @@ public sealed class AutoTypeService
         catch (InvalidOperationException)
         {
             _app.Tray?.ShowBalloon(Loc.T("AutoType.ErrorTitle"), Loc.T("AutoType.Blocked"));
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _typing);
         }
     }
 
@@ -209,7 +279,7 @@ public sealed class AutoTypeService
     }
 
     /// <summary>Suggestion click: fill the focused field (and its login/password counterpart) in place.</summary>
-    public async Task FillFieldAsync(VaultEntry entry, LoginField field)
+    public async Task FillFieldAsync(VaultEntry entry, LoginField field, bool? submitAfter = null)
     {
         if (Native.IsInputBlocked(field.Window))
         {
@@ -218,7 +288,8 @@ public sealed class AutoTypeService
         }
         var login = ValueFor(entry, FieldKind.Login);
         var sender = CreateSender(field.Window);
-        var submit = _app.Settings.SubmitAfterFill;
+        var submit = submitAfter ?? _app.Settings.SubmitAfterFill;
+        Interlocked.Increment(ref _typing);
         try
         {
             await Task.Run(() =>
@@ -260,6 +331,7 @@ public sealed class AutoTypeService
                 if (submit) sender.PressKey("ENTER");
             });
             _app.Vault.MarkUsed(entry.Id);
+            WindowFilled?.Invoke(field.Window);
         }
         catch (AutoTypeAbortedException)
         {
@@ -268,6 +340,10 @@ public sealed class AutoTypeService
         catch (InvalidOperationException)
         {
             _app.Tray?.ShowBalloon(Loc.T("AutoType.ErrorTitle"), Loc.T("AutoType.Blocked"));
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _typing);
         }
     }
 }
@@ -308,6 +384,32 @@ internal static class FieldFinder
         for (var i = 0; i < list.Count; i++)
             if (Automation.Compare(list[i], element)) { index = i; break; }
         return list;
+    }
+
+    /// <summary>
+    /// The field to start filling a window's login form from: the first password / PIN field (the login before it
+    /// is filled from there), otherwise the first login field.
+    /// </summary>
+    public static LoginField? FirstSignInField(IntPtr hwnd)
+    {
+        try
+        {
+            var root = AutomationElement.FromHandle(hwnd);
+            LoginField? login = null;
+            foreach (AutomationElement edit in root.FindAll(TreeScope.Descendants, EditCondition))
+            {
+                if (edit.Current.IsOffscreen) continue;
+                var field = LoginField.From(edit, hwnd);
+                if (field == null) continue;
+                if (field.Kind is PassKeeper.Core.AutoType.FieldKind.Password or PassKeeper.Core.AutoType.FieldKind.Pin) return field;
+                if (field.Kind != PassKeeper.Core.AutoType.FieldKind.Otp) login ??= field;
+            }
+            return login;
+        }
+        catch (Exception ex) when (ex is ElementNotAvailableException or InvalidOperationException or System.Runtime.InteropServices.COMException or ArgumentException)
+        {
+            return null;
+        }
     }
 
     public static AutomationElement? FindUsernameBefore(AutomationElement password)

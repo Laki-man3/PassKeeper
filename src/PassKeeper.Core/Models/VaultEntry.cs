@@ -25,6 +25,10 @@ public sealed class VaultEntry
     public string AutoTypeSequence { get; set; } = "";
     /// <summary>Window title / process name wildcard patterns for desktop applications.</summary>
     public List<string> WindowPatterns { get; set; } = [];
+    /// <summary>Section chosen by the user; null means it is derived from the entry (see <see cref="EntryCategories.Detect"/>).</summary>
+    public EntryCategory? Category { get; set; }
+    /// <summary>Sign in automatically when a matching application window shows its login form.</summary>
+    public bool AutoLogin { get; set; }
     public List<CustomField> CustomFields { get; set; } = [];
     public List<PasswordHistoryItem> PasswordHistory { get; set; } = [];
     public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
@@ -35,6 +39,9 @@ public sealed class VaultEntry
 
     public bool IsDeleted => DeletedUtc.HasValue;
 
+    [System.Text.Json.Serialization.JsonIgnore]
+    public EntryCategory EffectiveCategory => Category ?? EntryCategories.Detect(this);
+
     private static readonly string[] PinFieldNames = ["pin", "пин", "pin-код", "пин-код", "pin code", "token pin", "pin токена"];
 
     /// <summary>
@@ -42,12 +49,45 @@ public sealed class VaultEntry
     /// </summary>
     public string PinCode()
     {
-        foreach (var field in CustomFields)
+        var pin = StoredPin();
+        return pin.Length > 0 ? pin : Password;
+    }
+
+    /// <summary>The PIN stored in the custom field only (no fallback to the password).</summary>
+    public string StoredPin() => FindPinField()?.Value ?? "";
+
+    /// <summary>Stores the PIN in the "PIN" custom field (protected); an empty value removes the field.</summary>
+    public void SetPinCode(string pin)
+    {
+        var field = FindPinField();
+        if (pin.Length == 0)
         {
-            var name = field.Name.Trim().Replace('\u2011', '-').Replace('\u2010', '-').ToLowerInvariant();
-            if (PinFieldNames.Contains(name) && field.Value.Length > 0) return field.Value;
+            if (field != null) CustomFields.Remove(field);
+            return;
         }
-        return Password;
+        if (field == null) CustomFields.Add(new CustomField { Name = "PIN", Value = pin, Protected = true });
+        else
+        {
+            field.Value = pin;
+            field.Protected = true;
+        }
+    }
+
+    /// <summary>The custom field holding the token / smart-card PIN, if any.</summary>
+    public CustomField? FindPinField() =>
+        CustomFields.FirstOrDefault(f => PinFieldNames.Contains(f.Name.Trim().Replace('\u2011', '-').Replace('\u2010', '-').ToLowerInvariant()));
+
+    /// <summary>Independent copy with a new identity, fresh dates and no password history.</summary>
+    public VaultEntry CreateDuplicate(string title)
+    {
+        var copy = Clone();
+        copy.Id = Guid.NewGuid();
+        copy.Title = title;
+        copy.CreatedUtc = copy.ModifiedUtc = DateTime.UtcNow;
+        copy.LastUsedUtc = null;
+        copy.DeletedUtc = null;
+        copy.PasswordHistory.Clear();
+        return copy;
     }
 
     public IEnumerable<string> AllUrls()

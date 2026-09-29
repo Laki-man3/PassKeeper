@@ -17,8 +17,14 @@
                 <TextBlock x:Name="Ic" Style="{StaticResource Icon}" FontSize="14" HorizontalAlignment="Left" Text="{Binding Icon}" />
                 <TextBlock x:Name="Lb" Grid.Column="1" Text="{Binding Label}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" FontSize="13" />
                 <TextBlock Grid.Column="2" Text="{Binding CountText}" VerticalAlignment="Center" FontSize="11.5" Foreground="{DynamicResource Brush.TextMuted}" Margin="8,0,0,0" />
+                <Border x:Name="Sep" Grid.ColumnSpan="3" Height="1" Background="{DynamicResource Brush.Border}" VerticalAlignment="Center" Visibility="Collapsed" />
             </Grid>
             <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsSeparator}" Value="True">
+                    <Setter TargetName="Ic" Property="Visibility" Value="Collapsed" />
+                    <Setter TargetName="Lb" Property="Visibility" Value="Collapsed" />
+                    <Setter TargetName="Sep" Property="Visibility" Value="Visible" />
+                </DataTrigger>
                 <DataTrigger Binding="{Binding IsHeader}" Value="True">
                     <Setter TargetName="Ic" Property="Visibility" Value="Collapsed" />
                     <Setter TargetName="Lb" Property="FontSize" Value="11" />
@@ -32,6 +38,13 @@
 
         <Style x:Key="NavContainer" TargetType="ListBoxItem" BasedOn="{StaticResource Item.Nav}">
             <Style.Triggers>
+                <DataTrigger Binding="{Binding IsSeparator}" Value="True">
+                    <Setter Property="IsHitTestVisible" Value="False" />
+                    <Setter Property="Focusable" Value="False" />
+                    <Setter Property="Height" Value="17" />
+                    <Setter Property="MinHeight" Value="0" />
+                    <Setter Property="Margin" Value="14,0" />
+                </DataTrigger>
                 <DataTrigger Binding="{Binding IsHeader}" Value="True">
                     <Setter Property="IsHitTestVisible" Value="False" />
                     <Setter Property="Focusable" Value="False" />
@@ -61,7 +74,7 @@
 
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="236" />
+            <ColumnDefinition Width="252" />
             <ColumnDefinition Width="340" />
             <ColumnDefinition Width="*" MinWidth="320" />
         </Grid.ColumnDefinitions>
@@ -79,6 +92,7 @@
                     <Button Style="{StaticResource Btn.Nav}" c:UI.Icon="&#xE8B5;" Content="{l:T Vault.Import}" Click="Import_Click" />
                     <Button Style="{StaticResource Btn.Nav}" c:UI.Icon="&#xEDE1;" Content="{l:T Vault.Export}" Click="Export_Click" />
                     <Button Style="{StaticResource Btn.Nav}" c:UI.Icon="&#xE713;" Content="{l:T Vault.Settings}" Click="Settings_Click" />
+                    <Button Style="{StaticResource Btn.Nav}" c:UI.Icon="&#xE897;" Content="{l:T Vault.Help}" Click="Help_Click" />
                     <Border Height="1" Background="{DynamicResource Brush.Border}" Margin="4,8,4,8" />
                     <Grid Margin="4,0,0,0">
                         <Grid.ColumnDefinitions>
@@ -145,6 +159,7 @@
                                 <MenuItem x:Name="MenuFavorite" Click="MenuFavorite_Click"><MenuItem.Icon><TextBlock Text="&#xE734;" /></MenuItem.Icon></MenuItem>
                                 <MenuItem x:Name="MenuEdit" Header="{l:T Common.Edit}" InputGestureText="Ctrl+E" Click="MenuEdit_Click"><MenuItem.Icon><TextBlock Text="&#xE70F;" /></MenuItem.Icon></MenuItem>
                                 <MenuItem x:Name="MenuDuplicate" Header="{l:T Vault.Duplicate}" Click="MenuDuplicate_Click"><MenuItem.Icon><TextBlock Text="&#xE8C8;" /></MenuItem.Icon></MenuItem>
+                                <MenuItem x:Name="MenuUseForClient" Header="{l:T Vault.UseForClient}" Click="MenuUseForClient_Click"><MenuItem.Icon><TextBlock Text="&#xE705;" /></MenuItem.Icon></MenuItem>
                                 <MenuItem x:Name="MenuRestore" Header="{l:T Vault.Restore}" Click="MenuRestore_Click"><MenuItem.Icon><TextBlock Text="&#xE7A7;" /></MenuItem.Icon></MenuItem>
                                 <MenuItem x:Name="MenuDelete" Header="{l:T Common.Delete}" InputGestureText="Del" Click="MenuDelete_Click"><MenuItem.Icon><TextBlock Text="&#xE74D;" /></MenuItem.Icon></MenuItem>
                             </ContextMenu>
@@ -161,6 +176,8 @@
                             <Button Style="{StaticResource Btn.Primary}" c:UI.Icon="&#xE710;" Content="{l:T Vault.AddShort}" Click="Add_Click" />
                             <Button Style="{StaticResource Btn.Secondary}" c:UI.Icon="&#xE8B5;" Content="{l:T Vault.Import}" Margin="8,0,0,0" Click="Import_Click" />
                         </StackPanel>
+                        <Button x:Name="FindClientsButton" Style="{StaticResource Btn.Secondary}" c:UI.Icon="&#xE721;" Content="{l:T Vault.FindClients}"
+                                HorizontalAlignment="Center" Margin="0,16,0,0" Click="FindClients_Click" Visibility="Collapsed" />
                     </StackPanel>
                 </Grid>
             </DockPanel>

@@ -49,7 +49,7 @@ public sealed class EntryItem(VaultEntry entry) : Observable
     }
 }
 
-public enum NavKind { All, Favorites, Folder, Trash, Header }
+public enum NavKind { All, Favorites, Category, Folder, Trash, Header, Separator }
 
 /// <summary>Sidebar navigation row.</summary>
 public sealed class NavItem : Observable
@@ -59,8 +59,10 @@ public sealed class NavItem : Observable
 
     public required NavKind Kind { get; init; }
     public string Folder { get; init; } = "";
+    public EntryCategory Category { get; init; }
     public string Icon { get; init; } = "";
-    public bool IsHeader => Kind == NavKind.Header;
+    public bool IsHeader => Kind is NavKind.Header or NavKind.Separator;
+    public bool IsSeparator => Kind == NavKind.Separator;
     public int Depth { get; init; }
 
     public string Label
@@ -80,5 +82,5 @@ public sealed class NavItem : Observable
 
     public string CountText => Count > 0 ? Count.ToString() : "";
 
-    public bool SameAs(NavItem? other) => other != null && other.Kind == Kind && other.Folder == Folder;
+    public bool SameAs(NavItem? other) => other != null && other.Kind == Kind && other.Folder == Folder && other.Category == Category;
 }

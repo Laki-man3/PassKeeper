@@ -7,6 +7,7 @@ using PassKeeper.Core.Matching;
 using PassKeeper.Core.Models;
 using PassKeeper.Core.Storage;
 using PassKeeper.Localization;
+using PassKeeper.Services;
 using PassKeeper.ViewModels;
 
 namespace PassKeeper.Views;
@@ -98,7 +99,19 @@ public partial class VaultView : UserControl
         {
             new() { Kind = NavKind.All, Icon = "\uE8A9", Label = Loc.T("Nav.All"), Count = active.Count },
             new() { Kind = NavKind.Favorites, Icon = "\uE734", Label = Loc.T("Nav.Favorites"), Count = active.Count(e => e.Favorite) },
+            new() { Kind = NavKind.Header, Label = Loc.T("Nav.Sections").ToUpperInvariant() },
         };
+        foreach (var category in EntryCategories.All)
+        {
+            items.Add(new NavItem
+            {
+                Kind = NavKind.Category,
+                Category = category,
+                Icon = CategoryIcon(category),
+                Label = CategoryName(category),
+                Count = active.Count(e => e.EffectiveCategory == category),
+            });
+        }
         if (folders.Count > 0)
         {
             items.Add(new NavItem { Kind = NavKind.Header, Label = Loc.T("Nav.Folders").ToUpperInvariant() });
@@ -116,7 +129,7 @@ public partial class VaultView : UserControl
                 });
             }
         }
-        items.Add(new NavItem { Kind = NavKind.Header, Label = "" });
+        items.Add(new NavItem { Kind = NavKind.Separator });
         items.Add(new NavItem { Kind = NavKind.Trash, Icon = "\uE74D", Label = Loc.T("Nav.Trash"), Count = Vault.Data.Entries.Count(e => e.IsDeleted) });
 
         _suppressSelection = true;
@@ -127,6 +140,16 @@ public partial class VaultView : UserControl
         _currentNav = select;
         _suppressSelection = false;
     }
+
+    public static string CategoryName(EntryCategory category) => Loc.T("Category." + category);
+
+    public static string CategoryIcon(EntryCategory category) => category switch
+    {
+        EntryCategory.Web => "\uE774",
+        EntryCategory.Remote => "\uE705",
+        EntryCategory.App => "\uE71D",
+        _ => "\uE8EC",
+    };
 
     private static bool InFolder(VaultEntry e, string folder)
     {
@@ -140,6 +163,7 @@ public partial class VaultView : UserControl
         NavKind.Trash => e.IsDeleted,
         NavKind.Favorites => !e.IsDeleted && e.Favorite,
         NavKind.Folder => !e.IsDeleted && InFolder(e, _currentNav.Folder),
+        NavKind.Category => !e.IsDeleted && e.EffectiveCategory == _currentNav.Category,
         _ => !e.IsDeleted,
     };
 
@@ -178,6 +202,15 @@ public partial class VaultView : UserControl
             EmptyText.Text = query.Length > 0 ? Loc.T("Vault.NothingFoundHint") : isTrash ? Loc.T("Vault.TrashEmptyHint") : noEntries ? Loc.T("Vault.NoEntriesHint") : "";
             EmptyText.Visibility = EmptyText.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
             EmptyActions.Visibility = noEntries ? Visibility.Visible : Visibility.Collapsed;
+            var clients = _currentNav?.Kind == NavKind.Category && _currentNav.Category is EntryCategory.Remote or EntryCategory.App && query.Length == 0;
+            FindClientsButton.Visibility = clients ? Visibility.Visible : Visibility.Collapsed;
+            if (clients && !noEntries)
+            {
+                EmptyIcon.Text = CategoryIcon(_currentNav!.Category);
+                EmptyTitle.Text = Loc.T("Vault.EmptySection");
+                EmptyText.Text = Loc.T(_currentNav.Category == EntryCategory.Remote ? "Vault.EmptyRemoteHint" : "Vault.EmptyAppHint");
+                EmptyText.Visibility = Visibility.Visible;
+            }
         }
     }
 
@@ -232,27 +265,36 @@ public partial class VaultView : UserControl
         view.EditRequested += StartEdit;
         view.DeleteRequested -= DeleteEntry;
         view.DeleteRequested += DeleteEntry;
+        view.DuplicateRequested -= DuplicateEntry;
+        view.DuplicateRequested += DuplicateEntry;
+        view.UseForClientRequested -= UseForClient;
+        view.UseForClientRequested += UseForClient;
         DetailHost.Content = view;
     }
 
     private void StartEdit(VaultEntry entry) => OpenEditor(entry.Clone(), isNew: false);
 
-    private void OpenEditor(VaultEntry entry, bool isNew)
+    private EntryEditorView OpenEditor(VaultEntry entry, bool isNew, Func<VaultEntry, Task>? fillAfterSave = null)
     {
+        var oldPassword = isNew ? "" : Vault.Find(entry.Id)?.Password ?? "";
         var editor = new EntryEditorView(entry, isNew, Vault.Folders());
-        editor.Saved += saved =>
+        editor.Saved += async saved =>
         {
             Vault.Upsert(saved);
             if (_currentNav?.Kind == NavKind.Trash || (_currentNav?.Kind == NavKind.Folder && !InFolder(saved, _currentNav.Folder)) ||
-                (_currentNav?.Kind == NavKind.Favorites && !saved.Favorite))
+                (_currentNav?.Kind == NavKind.Favorites && !saved.Favorite) ||
+                (_currentNav?.Kind == NavKind.Category && saved.EffectiveCategory != _currentNav.Category))
             {
-                _currentNav = _nav[0];
+                _currentNav = _nav.FirstOrDefault(n => n.Kind == NavKind.Category && n.Category == saved.EffectiveCategory) ?? _nav[0];
                 RebuildNav();
             }
             Search.Text = Search.Text.Length > 0 && !EntryMatcher.MatchesSearch(saved, Search.Text) ? "" : Search.Text;
             RefreshList(saved.Id);
             ShowDetails(Vault.Find(saved.Id)!);
             App.Instance.Main.ShowToast(Loc.T(isNew ? "Editor.Created" : "Editor.Saved"));
+            var fill = fillAfterSave != null && editor.FillAfterSave;
+            if (!fill) await OfferPasswordSyncAsync(saved, oldPassword);
+            if (fill) await fillAfterSave!(Vault.Find(saved.Id)!);
         };
         editor.Cancelled += () =>
         {
@@ -260,6 +302,75 @@ public partial class VaultView : UserControl
             else ShowEmptyDetails();
         };
         DetailHost.Content = editor;
+        return editor;
+    }
+
+    /// <summary>
+    /// The same password is often used by a site and a VPN client (a domain account): when it changes in one entry,
+    /// offer to change it in the entries that still have the old one.
+    /// </summary>
+    private async Task OfferPasswordSyncAsync(VaultEntry saved, string oldPassword)
+    {
+        if (oldPassword.Length == 0 || saved.Password == oldPassword) return;
+        var others = Vault.ActiveEntries.Where(e => e.Id != saved.Id && e.Password == oldPassword).ToList();
+        if (others.Count == 0) return;
+        var names = string.Join(", ", others.Take(4).Select(e => "«" + e.Title + "»")) + (others.Count > 4 ? ", …" : "");
+        if (!await ConfirmDialog.AskAsync(Loc.T("Vault.SyncTitle"), Loc.F("Vault.SyncText", names), Loc.T("Vault.SyncButton"))) return;
+        foreach (var other in others)
+        {
+            var copy = other.Clone();
+            copy.SetPassword(saved.Password);
+            Vault.Upsert(copy);
+        }
+        App.Instance.Main.ShowToast(Loc.F("Vault.Synced", Loc.Plural(others.Count, "Plural.Entries")));
+    }
+
+    private async void DuplicateEntry(VaultEntry entry)
+    {
+        if (!await ConfirmLeaveEditorAsync()) return;
+        OpenEditor(entry.CreateDuplicate(Loc.F("Vault.CopyOf", entry.Title)), isNew: true);
+    }
+
+    /// <summary>A copy of a site's login and password for a VPN client or program: the client is chosen first.</summary>
+    private async void UseForClient(VaultEntry source)
+    {
+        if (!await ConfirmLeaveEditorAsync()) return;
+        if (await App.Instance.Main.ShowDialogAsync(new ClientPickerDialog()) is not DetectedWindow client) return;
+        var entry = new VaultEntry
+        {
+            Category = client.Category,
+            Folder = source.Folder,
+            AutoLogin = client.Category == EntryCategory.Remote,
+            Notes = Loc.F("Vault.CopiedFromNote", source.Title),
+        };
+        var editor = OpenEditor(entry, isNew: true);
+        editor.ApplyClient(client);
+        editor.CopyCredentials(source);
+        App.Instance.Main.ShowToast(Loc.F("Editor.TakenFrom", source.Title));
+    }
+
+    /// <summary>
+    /// The auto-type hotkey found a sign-in window that no entry covers: open a new entry for exactly that client,
+    /// with its fields, and sign in once it is saved.
+    /// </summary>
+    public async void StartEntryForWindow(DetectedWindow window, SignInForm form, Func<VaultEntry, Task> fill)
+    {
+        if (!await ConfirmLeaveEditorAsync()) return;
+        _suppressSelection = true;
+        EntryList.SelectedItem = null;
+        _suppressSelection = false;
+        var entry = new VaultEntry { Category = window.Category, AutoLogin = window.Category == EntryCategory.Remote };
+        var editor = OpenEditor(entry, isNew: true, fill);
+        editor.ApplyClient(window);
+        editor.ShowDetection(window, form);
+    }
+
+    private async void FindClients_Click(object sender, RoutedEventArgs e)
+    {
+        if (!await ConfirmLeaveEditorAsync()) return;
+        if (await App.Instance.Main.ShowDialogAsync(new ClientPickerDialog()) is not DetectedWindow client) return;
+        var editor = OpenEditor(new VaultEntry { Category = client.Category, AutoLogin = client.Category == EntryCategory.Remote }, isNew: true);
+        editor.ApplyClient(client);
     }
 
     private async void Add_Click(object sender, RoutedEventArgs e)
@@ -268,7 +379,12 @@ public partial class VaultView : UserControl
         _suppressSelection = true;
         EntryList.SelectedItem = null;
         _suppressSelection = false;
-        var entry = new VaultEntry { Folder = _currentNav?.Kind == NavKind.Folder ? _currentNav.Folder : "", Favorite = _currentNav?.Kind == NavKind.Favorites };
+        var entry = new VaultEntry
+        {
+            Folder = _currentNav?.Kind == NavKind.Folder ? _currentNav.Folder : "",
+            Favorite = _currentNav?.Kind == NavKind.Favorites,
+            Category = _currentNav?.Kind == NavKind.Category ? _currentNav.Category : null,
+        };
         OpenEditor(entry, isNew: true);
     }
 
@@ -406,7 +522,7 @@ public partial class VaultView : UserControl
         MenuCopyPassword.IsEnabled = item.Entry.Password.Length > 0;
         MenuOpenUrl.IsEnabled = DomainUtil.NormalizeUrlForOpen(item.Entry.Url) != null;
         MenuFavorite.Header = Loc.T(item.Entry.Favorite ? "Vault.Unfavorite" : "Vault.Favorite");
-        MenuFavorite.Visibility = MenuEdit.Visibility = MenuDuplicate.Visibility = deleted ? Visibility.Collapsed : Visibility.Visible;
+        MenuFavorite.Visibility = MenuEdit.Visibility = MenuDuplicate.Visibility = MenuUseForClient.Visibility = deleted ? Visibility.Collapsed : Visibility.Visible;
         MenuRestore.Visibility = deleted ? Visibility.Visible : Visibility.Collapsed;
         MenuDelete.Header = Loc.T(deleted ? "Vault.DeleteForever" : "Common.Delete");
     }
@@ -438,13 +554,12 @@ public partial class VaultView : UserControl
 
     private void MenuDuplicate_Click(object sender, RoutedEventArgs e)
     {
-        if (Selected is not { } item) return;
-        var copy = item.Entry.Clone();
-        copy.Id = Guid.NewGuid();
-        copy.Title = Loc.F("Vault.CopyOf", copy.Title);
-        copy.CreatedUtc = DateTime.UtcNow;
-        copy.PasswordHistory.Clear();
-        OpenEditor(copy, isNew: true);
+        if (Selected is { } item) DuplicateEntry(item.Entry);
+    }
+
+    private void MenuUseForClient_Click(object sender, RoutedEventArgs e)
+    {
+        if (Selected is { } item) UseForClient(item.Entry);
     }
 
     private void MenuRestore_Click(object sender, RoutedEventArgs e)
@@ -477,4 +592,6 @@ public partial class VaultView : UserControl
     }
 
     private void Lock_Click(object sender, RoutedEventArgs e) => App.Instance.Lock();
+
+    private async void Help_Click(object sender, RoutedEventArgs e) => await HelpDialog.ShowAsync();
 }

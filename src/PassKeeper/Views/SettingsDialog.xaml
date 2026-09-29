@@ -105,6 +105,12 @@
                                 <TextBlock Style="{StaticResource Text.Muted}" Text="{l:T Settings.SuggestionsHint}" />
                             </StackPanel>
                         </CheckBox>
+                        <CheckBox x:Name="AutoLogin" Style="{StaticResource Toggle}" Margin="0,0,0,12" Click="Simple_Changed">
+                            <StackPanel>
+                                <TextBlock Text="{l:T Settings.AutoLogin}" />
+                                <TextBlock Style="{StaticResource Text.Muted}" Text="{l:T Settings.AutoLoginHint}" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </CheckBox>
                         <CheckBox x:Name="Submit" Style="{StaticResource Toggle}" Margin="0,0,0,12" Content="{l:T Settings.Submit}" Click="Simple_Changed" />
                         <CheckBox x:Name="Compatible" Style="{StaticResource Toggle}" Margin="0,0,0,12" Click="Simple_Changed">
                             <StackPanel>

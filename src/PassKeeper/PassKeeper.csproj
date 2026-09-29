@@ -36,6 +36,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- User manual shown by Help (works offline). WithCulture=false: "*.ru.md" is not a satellite resource. -->
+    <EmbeddedResource Include="..\..\docs\manual.ru.md" LogicalName="manual.ru.md" WithCulture="false" />
+    <EmbeddedResource Include="..\..\docs\manual.en.md" LogicalName="manual.en.md" WithCulture="false" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\PassKeeper.Core\PassKeeper.Core.csproj" />
   </ItemGroup>
 

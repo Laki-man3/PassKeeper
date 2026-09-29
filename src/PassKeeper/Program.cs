@@ -48,11 +48,11 @@ public static class Program
         SingleInstance? instance = null;
         if (options.ScreenshotsDirectory == null && options.SelfTestReport == null)
         {
-            instance = SingleInstance.TryAcquire();
+            instance = SingleInstance.TryAcquire(options.DataDirectory);
             if (instance == null)
             {
                 // Already running in this session: bring it to front (unless started by autostart).
-                if (!options.Minimized) SingleInstance.Send("SHOW");
+                if (!options.Minimized) SingleInstance.Send("SHOW", dataDirectory: options.DataDirectory);
                 return 0;
             }
         }

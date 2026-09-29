@@ -19,6 +19,7 @@ public partial class App : Application
     private readonly SingleInstance? _instance;
     private IdleMonitor? _idle;
     private FocusWatcher? _watcher;
+    private AutoLoginService? _autoLogin;
     private SuggestionPopup? _popup;
 
     public App(StartupOptions options, SingleInstance? instance)
@@ -61,7 +62,7 @@ public partial class App : Application
         AutoType = new AutoTypeService(this);
         Main = new MainWindow
         {
-            Width = Math.Max(Settings.WindowWidth, 900),
+            Width = Math.Max(Settings.WindowWidth, 920),
             Height = Math.Max(Settings.WindowHeight, 580),
         };
 
@@ -101,6 +102,10 @@ public partial class App : Application
             if (_popup is { IsMouseOver: false }) _popup.HidePopup();
         });
         if (Settings.SmartSuggestions) _watcher.Start();
+
+        _autoLogin = new AutoLoginService(this);
+        if (Settings.AutoLogin) _autoLogin.Start();
+        Vault.DataChanged += (_, _) => Dispatcher.BeginInvoke(() => _autoLogin?.UpdateTriggers());
 
         SystemEvents.SessionSwitch += OnSessionSwitch;
         _instance?.Listen(cmd => Dispatcher.BeginInvoke(() => OnRemoteCommand(cmd)));
@@ -149,6 +154,7 @@ public partial class App : Application
         else
         {
             _idle?.Reset();
+            _autoLogin?.UpdateTriggers();
         }
         ShowStartPage();
         UpdateTray();
@@ -221,6 +227,7 @@ public partial class App : Application
         {
             SaveWindowSize();
             _watcher?.Dispose();
+            _autoLogin?.Dispose();
             Hotkeys?.Dispose();
             _idle?.Dispose();
             Tray?.Dispose();
@@ -255,6 +262,8 @@ public partial class App : Application
             _watcher?.Stop();
             _popup?.HidePopup();
         }
+        if (Settings.AutoLogin) _autoLogin?.Start();
+        else _autoLogin?.Stop();
         UpdateTray();
     }
 
@@ -266,21 +275,39 @@ public partial class App : Application
     {
         if (!Settings.SmartSuggestions || IsExiting) return;
         var target = TargetDetector.Capture(field.Window, detectUrl: true, focused: field.Element);
-        Dispatcher.BeginInvoke(() =>
+        Dispatcher.BeginInvoke(async () =>
         {
             if (!Vault.Exists || IsExiting) return;
+            if (_autoLogin != null && await _autoLogin.TryWindowAsync(field.Window, field))
+            {
+                _popup?.HidePopup();
+                return;
+            }
             _popup ??= CreatePopup();
             if (!Vault.IsUnlocked)
             {
                 if (field.Kind is FieldKind.Password or FieldKind.Otp or FieldKind.Pin) _popup.ShowLocked(field, target);
                 return;
             }
-            var matches = EntryMatcher.Match(Vault.ActiveEntries, target.ToContext())
-                .Select(m => m.Entry)
-                .Where(e => AutoTypeService.CanFill(e, field.Kind))
-                .ToList();
-            if (matches.Count == 0) _popup.HidePopup();
-            else _popup.ShowEntries(field, target, matches);
+            var all = EntryMatcher.Match(Vault.ActiveEntries, target.ToContext());
+            var matches = all.Select(m => m.Entry).Where(e => AutoTypeService.CanFill(e, field.Kind)).ToList();
+            if (matches.Count > 0)
+            {
+                _popup.ShowEntries(field, target, matches);
+                return;
+            }
+            // A program without any entry: offer to create one when it is a known client or asks for a password / PIN.
+            if (all.Count == 0 && !target.IsBrowser)
+            {
+                var known = KnownApps.Match(target.ProcessName, target.Title);
+                var form = known == null ? await Task.Run(() => ClientDetector.InspectForm(field.Window)) : SignInForm.None;
+                if (known != null || form.HasPassword || form.HasPin)
+                {
+                    _popup.ShowCreate(field, target, known?.Name ?? target.Describe());
+                    return;
+                }
+            }
+            _popup.HidePopup();
         });
     }
 
@@ -292,7 +319,31 @@ public partial class App : Application
         {
             if (await QuickUnlockWindow.ShowAsync(null)) Native.ForceForeground(field.Window);
         };
+        popup.CreateRequested += async field =>
+        {
+            var form = await Task.Run(() => ClientDetector.InspectForm(field.Window));
+            CreateEntryForWindow(field.Window, form);
+        };
         return popup;
+    }
+
+    /// <summary>
+    /// Opens a new entry for the given sign-in window (client, patterns and found fields filled in); once it is saved,
+    /// PassKeeper returns to the window and signs in.
+    /// </summary>
+    public void CreateEntryForWindow(IntPtr hwnd, SignInForm form)
+    {
+        var window = ClientDetector.Describe(hwnd);
+        ShowMainWindow();
+        Main.CloseAllDialogs();
+        ShowStartPage(); // right after a quick unlock the vault page may not be shown yet
+        if (Main.CurrentPage is not VaultView view) return;
+        view.StartEntryForWindow(window, form, async saved =>
+        {
+            Main.WindowState = WindowState.Minimized;
+            if (!await AutoType.FillWindowAsync(saved, hwnd, submit: true))
+                Tray?.ShowBalloon("PassKeeper", Loc.T("AutoType.WindowGone"));
+        });
     }
 
     // ------------------------------------------------------------------ helpers used by views

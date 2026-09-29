@@ -4,28 +4,46 @@ using PassKeeper.Shared;
 
 namespace PassKeeper.Services;
 
-/// <summary>One instance per user session. Later launches forward a command ("SHOW", "EXIT") over a
-/// named pipe restricted to the current user.</summary>
+/// <summary>
+/// One instance per user session and vault. Later launches forward a command ("SHOW", "EXIT") over a named pipe
+/// restricted to the current user. A copy started with its own data folder (--data, a second vault) is a separate
+/// instance.
+/// </summary>
 public sealed class SingleInstance : IDisposable
 {
     private readonly Mutex _mutex;
+    private readonly string _name;
     private readonly CancellationTokenSource _cts = new();
 
-    private SingleInstance(Mutex mutex) => _mutex = mutex;
-
-    public static SingleInstance? TryAcquire()
+    private SingleInstance(Mutex mutex, string name)
     {
-        var mutex = new Mutex(true, "Local\\" + InstallLayout.PipeName(), out var created);
-        if (created) return new SingleInstance(mutex);
+        _mutex = mutex;
+        _name = name;
+    }
+
+    /// <summary>Pipe / mutex name: the default one for the standard data folder, a suffixed one for --data.</summary>
+    public static string NameFor(string? dataDirectory)
+    {
+        var name = InstallLayout.PipeName();
+        if (string.IsNullOrWhiteSpace(dataDirectory)) return name;
+        var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(Path.GetFullPath(dataDirectory).TrimEnd('\\').ToLowerInvariant()));
+        return name + "-" + Convert.ToHexString(bytes, 0, 4);
+    }
+
+    public static SingleInstance? TryAcquire(string? dataDirectory = null)
+    {
+        var name = NameFor(dataDirectory);
+        var mutex = new Mutex(true, "Local\\" + name, out var created);
+        if (created) return new SingleInstance(mutex, name);
         mutex.Dispose();
         return null;
     }
 
-    public static bool Send(string command, int timeoutMs = 2000)
+    public static bool Send(string command, int timeoutMs = 2000, string? dataDirectory = null)
     {
         try
         {
-            using var client = new NamedPipeClientStream(".", InstallLayout.PipeName(), PipeDirection.Out, PipeOptions.CurrentUserOnly);
+            using var client = new NamedPipeClientStream(".", NameFor(dataDirectory), PipeDirection.Out, PipeOptions.CurrentUserOnly);
             client.Connect(timeoutMs);
             using var writer = new StreamWriter(client);
             writer.WriteLine(command);
@@ -47,7 +65,7 @@ public sealed class SingleInstance : IDisposable
             {
                 try
                 {
-                    await using var server = new NamedPipeServerStream(InstallLayout.PipeName(), PipeDirection.In, 1,
+                    await using var server = new NamedPipeServerStream(_name, PipeDirection.In, 1,
                         PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
                     await server.WaitForConnectionAsync(token);
                     using var reader = new StreamReader(server);

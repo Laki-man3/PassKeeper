@@ -20,6 +20,10 @@ public sealed class AppSettings
     public int ClipboardClearSeconds { get; set; } = 30;
     public string AutoTypeHotkey { get; set; } = "Ctrl+Alt+A";
     public bool SmartSuggestions { get; set; } = true;
+    /// <summary>Sign in automatically to clients whose entries have auto sign-in enabled.</summary>
+    public bool AutoLogin { get; set; } = true;
+    /// <summary>Known client ids / executable names that have auto sign-in entries (read while the vault is locked).</summary>
+    public List<string> AutoLoginTriggers { get; set; } = [];
     public bool SubmitAfterFill { get; set; }
     public int KeystrokeDelayMs { get; set; } = 8;
     public bool CompatibleTyping { get; set; }

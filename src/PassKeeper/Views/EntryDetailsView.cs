@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
 using PassKeeper.Controls;
+using PassKeeper.Core.AutoType;
 using PassKeeper.Core.Matching;
 using PassKeeper.Core.Models;
 using PassKeeper.Core.Security;
@@ -30,6 +31,8 @@ public sealed class EntryDetailsView : UserControl
     public Guid EntryId => _entry.Id;
     public event Action<VaultEntry>? EditRequested;
     public event Action<VaultEntry>? DeleteRequested;
+    public event Action<VaultEntry>? DuplicateRequested;
+    public event Action<VaultEntry>? UseForClientRequested;
 
     private Style S(string key) => (Style)FindResource(key);
 
@@ -45,18 +48,21 @@ public sealed class EntryDetailsView : UserControl
         var login = entry.Username;
         if (login.Length > 0) fields.Children.Add(Row(Loc.T("Field.Login"), login, "\uE77B"));
         if (entry.Password.Length > 0) fields.Children.Add(SecretRow(Loc.T("Field.Password"), entry.Password, "\uE8D7", showStrength: true));
-        foreach (var url in entry.AllUrls()) fields.Children.Add(Row(Loc.T("Field.Website"), url, "\uE774", isLink: true));
+        if (entry.StoredPin().Length > 0) fields.Children.Add(SecretRow(Loc.T("Editor.Pin"), entry.StoredPin(), "\uE928", showStrength: false));
+        var urlLabel = Loc.T(entry.EffectiveCategory == EntryCategory.Remote ? "Editor.Server" : "Field.Website");
+        foreach (var url in entry.AllUrls()) fields.Children.Add(Row(urlLabel, url, "\uE774", isLink: true));
         if (entry.Email.Length > 0) fields.Children.Add(Row(Loc.T("Field.Email"), entry.Email, "\uE715"));
         if (entry.Phone.Length > 0) fields.Children.Add(Row(Loc.T("Field.Phone"), entry.Phone, "\uE717"));
         if (entry.SecretKey.Length > 0) fields.Children.Add(SecretRow(Loc.T("Field.Key"), entry.SecretKey, "\uE192", showStrength: false));
         if (Totp.Parse(entry.Totp) is { } totp) fields.Children.Add(TotpRow(totp));
         if (fields.Children.Count > 0) root.Children.Add(Card(fields));
 
-        if (entry.CustomFields.Count > 0)
+        var pinField = entry.FindPinField();
+        if (entry.CustomFields.Any(f => f != pinField))
         {
             root.Children.Add(SectionTitle(Loc.T("Details.CustomFields")));
             var custom = new StackPanel();
-            foreach (var f in entry.CustomFields)
+            foreach (var f in entry.CustomFields.Where(f => f != pinField))
                 custom.Children.Add(f.Protected ? SecretRow(f.Name, f.Value, "\uE8D7", false) : Row(f.Name, f.Value, "\uE8EC"));
             root.Children.Add(Card(custom));
         }
@@ -82,7 +88,9 @@ public sealed class EntryDetailsView : UserControl
         {
             root.Children.Add(SectionTitle(Loc.T("Details.AutoType")));
             var at = new StackPanel();
+            if (KnownApps.ForPatterns(entry.WindowPatterns) is { } app) at.Children.Add(Row(Loc.T("Editor.Client"), app.Name, "\uE705", copy: false));
             if (entry.WindowPatterns.Count > 0) at.Children.Add(Row(Loc.T("Field.Windows"), string.Join("\n", entry.WindowPatterns), "\uE737", copy: false));
+            if (entry.AutoLogin) at.Children.Add(Row(Loc.T("Editor.AutoLogin"), Loc.T("Details.AutoLoginOn"), "\uE768", copy: false));
             if (entry.AutoTypeSequence.Length > 0) at.Children.Add(Row(Loc.T("Field.Sequence"), entry.AutoTypeSequence, "\uE765", copy: false));
             root.Children.Add(Card(at));
         }
@@ -117,10 +125,13 @@ public sealed class EntryDetailsView : UserControl
         grid.Children.Add(new Avatar { SourceText = e.Title.Length > 0 ? e.Title : e.Url, Size = 60 });
 
         var titles = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(16, 0, 12, 0) };
-        titles.Children.Add(new TextBlock { Text = e.Title, Style = S("Text.H2"), FontSize = 22, ToolTip = e.Title });
+        titles.Children.Add(new TextBlock { Text = e.Title, Style = S("Text.H2"), FontSize = 22, ToolTip = e.Title, TextWrapping = TextWrapping.Wrap });
         var sub = new WrapPanel { Margin = new Thickness(0, 5, 0, 0) };
+        sub.Children.Add(Chip(VaultView.CategoryIcon(e.EffectiveCategory), VaultView.CategoryName(e.EffectiveCategory)));
+        if (KnownApps.ForPatterns(e.WindowPatterns) is { } client && client.Name != e.Title) sub.Children.Add(Chip("\uE7F4", client.Name));
+        if (e.AutoLogin) sub.Children.Add(Chip("\uE768", Loc.T("Details.AutoLoginChip")));
         if (e.Folder.Length > 0) sub.Children.Add(Chip("\uE8B7", e.Folder.Replace("/", " / ")));
-        if (DomainUtil.GetHost(e.Url) is { } host) sub.Children.Add(Chip("\uE774", host));
+        if (e.EffectiveCategory == EntryCategory.Web && DomainUtil.GetHost(e.Url) is { } host) sub.Children.Add(Chip("\uE774", host));
         if (e.IsDeleted) sub.Children.Add(Chip("\uE74D", Loc.T("Details.InTrash")));
         if (sub.Children.Count > 0) titles.Children.Add(sub);
         Grid.SetColumn(titles, 1);
@@ -156,17 +167,34 @@ public sealed class EntryDetailsView : UserControl
             UI.SetIcon(edit, "\uE70F");
             edit.Click += (_, _) => EditRequested?.Invoke(e);
 
-            var delete = new Button { Style = S("Btn.Icon"), Content = "\uE74D", ToolTip = Loc.T("Common.Delete"), Margin = new Thickness(4, 0, 0, 0) };
-            delete.Click += (_, _) => DeleteRequested?.Invoke(e);
+            var more = new Button { Style = S("Btn.Icon"), Content = "\uE712", ToolTip = Loc.T("Details.More"), Margin = new Thickness(4, 0, 0, 0) };
+            more.Click += (_, _) => MoreMenu(e, more).IsOpen = true;
 
             actions.Children.Add(fav);
             actions.Children.Add(type);
             actions.Children.Add(edit);
-            actions.Children.Add(delete);
+            actions.Children.Add(more);
         }
         Grid.SetColumn(actions, 2);
         grid.Children.Add(actions);
         return grid;
+    }
+
+    private ContextMenu MoreMenu(VaultEntry e, Button target)
+    {
+        var menu = new ContextMenu { PlacementTarget = target, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
+        menu.Items.Add(MenuItem("\uE8C8", Loc.T("Vault.Duplicate"), () => DuplicateRequested?.Invoke(e)));
+        menu.Items.Add(MenuItem("\uE705", Loc.T("Vault.UseForClient"), () => UseForClientRequested?.Invoke(e)));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(MenuItem("\uE74D", Loc.T("Common.Delete"), () => DeleteRequested?.Invoke(e)));
+        return menu;
+    }
+
+    private static MenuItem MenuItem(string icon, string text, Action click)
+    {
+        var item = new MenuItem { Header = text, Icon = new TextBlock { Text = icon } };
+        item.Click += (_, _) => click();
+        return item;
     }
 
     private Border Chip(string icon, string text)
