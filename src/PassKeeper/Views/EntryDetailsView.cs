@@ -24,8 +24,10 @@ public sealed class EntryDetailsView : UserControl
     {
         Content = _scroll;
         _totpTimer.Tick += (_, _) => _totpTick?.Invoke();
-        Loaded += (_, _) => _totpTimer.Start();
+        // The 2FA code ticks only while it is on screen (not in the tray, not for entries without TOTP).
+        Loaded += (_, _) => UpdateTimer();
         Unloaded += (_, _) => _totpTimer.Stop();
+        IsVisibleChanged += (_, _) => UpdateTimer();
     }
 
     public Guid EntryId => _entry.Id;
@@ -33,8 +35,15 @@ public sealed class EntryDetailsView : UserControl
     public event Action<VaultEntry>? DeleteRequested;
     public event Action<VaultEntry>? DuplicateRequested;
     public event Action<VaultEntry>? UseForClientRequested;
+    public event Action<VaultEntry>? UseForSiteRequested;
 
     private Style S(string key) => (Style)FindResource(key);
+
+    private void UpdateTimer()
+    {
+        if (_totpTick != null && IsVisible && IsLoaded) _totpTimer.Start();
+        else _totpTimer.Stop();
+    }
 
     public void Show(VaultEntry entry)
     {
@@ -112,6 +121,7 @@ public sealed class EntryDetailsView : UserControl
 
         _scroll.Content = root;
         _scroll.ScrollToVerticalOffset(offset);
+        UpdateTimer();
     }
 
     private FrameworkElement BuildHeader()
@@ -185,6 +195,8 @@ public sealed class EntryDetailsView : UserControl
         var menu = new ContextMenu { PlacementTarget = target, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
         menu.Items.Add(MenuItem("\uE8C8", Loc.T("Vault.Duplicate"), () => DuplicateRequested?.Invoke(e)));
         menu.Items.Add(MenuItem("\uE705", Loc.T("Vault.UseForClient"), () => UseForClientRequested?.Invoke(e)));
+        if (e.EffectiveCategory != EntryCategory.Web)
+            menu.Items.Add(MenuItem("\uE774", Loc.T("Vault.UseForSite"), () => UseForSiteRequested?.Invoke(e)));
         menu.Items.Add(new Separator());
         menu.Items.Add(MenuItem("\uE74D", Loc.T("Common.Delete"), () => DeleteRequested?.Invoke(e)));
         return menu;

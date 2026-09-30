@@ -78,6 +78,8 @@ internal static class DevScreens
         }
 
         app.Vault.Lock();
+        main.Navigate(new LoginView());
+        await Snap(main, dir, $"02b-login-{suffix}");
         main.Navigate(new UnlockView());
         await Snap(main, dir, $"03-unlock-{suffix}");
         await Task.Run(() => app.Vault.UnlockWithPin("482913"));

@@ -105,6 +105,12 @@
                                 <TextBlock Style="{StaticResource Text.Muted}" Text="{l:T Settings.SuggestionsHint}" />
                             </StackPanel>
                         </CheckBox>
+                        <CheckBox x:Name="AutoFillWeb" Style="{StaticResource Toggle}" Margin="0,0,0,12" Click="Simple_Changed">
+                            <StackPanel>
+                                <TextBlock Text="{l:T Settings.AutoFillWeb}" />
+                                <TextBlock Style="{StaticResource Text.Muted}" Text="{l:T Settings.AutoFillWebHint}" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </CheckBox>
                         <CheckBox x:Name="AutoLogin" Style="{StaticResource Toggle}" Margin="0,0,0,12" Click="Simple_Changed">
                             <StackPanel>
                                 <TextBlock Text="{l:T Settings.AutoLogin}" />
@@ -122,6 +128,19 @@
                             <TextBlock Text="{l:T Settings.KeyDelay}" VerticalAlignment="Center" />
                             <ComboBox x:Name="KeyDelay" Width="180" HorizontalAlignment="Right" SelectionChanged="Simple_Changed" />
                         </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Profile -->
+                <TextBlock Style="{StaticResource Text.Label}" Text="{l:T Profile.Section}" />
+                <Border Style="{StaticResource SectionCard}">
+                    <StackPanel>
+                        <TextBlock x:Name="ProfileName" FontWeight="SemiBold" />
+                        <TextBlock Style="{StaticResource Text.Muted}" Margin="0,2,0,12" TextWrapping="Wrap" Text="{l:T Profile.Hint}" />
+                        <WrapPanel Margin="0,0,0,14">
+                            <Button Style="{StaticResource Btn.Secondary}" c:UI.Icon="&#xE7E8;" Content="{l:T Profile.SignOut}" Margin="0,0,8,0" Click="SignOut_Click" />
+                            <Button Style="{StaticResource Btn.Secondary}" c:UI.Icon="&#xE74D;" Content="{l:T Profile.Delete}" Click="DeleteProfile_Click" />
+                        </WrapPanel>
                     </StackPanel>
                 </Border>
 

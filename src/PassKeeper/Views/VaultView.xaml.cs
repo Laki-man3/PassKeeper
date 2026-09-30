@@ -26,6 +26,8 @@ public partial class VaultView : UserControl
     {
         InitializeComponent();
         NavList.ItemsSource = _nav;
+        SidebarColumn.Width = new GridLength(Math.Clamp(App.Instance.Settings.SidebarWidth, SidebarColumn.MinWidth, SidebarColumn.MaxWidth));
+        ListColumn.Width = new GridLength(Math.Clamp(App.Instance.Settings.ListWidth, ListColumn.MinWidth, ListColumn.MaxWidth));
         _sort = App.Instance.Settings.SortOrder;
         BuildSortBox();
         UpdateUser();
@@ -269,6 +271,8 @@ public partial class VaultView : UserControl
         view.DuplicateRequested += DuplicateEntry;
         view.UseForClientRequested -= UseForClient;
         view.UseForClientRequested += UseForClient;
+        view.UseForSiteRequested -= UseForSite;
+        view.UseForSiteRequested += UseForSite;
         DetailHost.Content = view;
     }
 
@@ -346,6 +350,17 @@ public partial class VaultView : UserControl
         var editor = OpenEditor(entry, isNew: true);
         editor.ApplyClient(client);
         editor.CopyCredentials(source);
+        App.Instance.Main.ShowToast(Loc.F("Editor.TakenFrom", source.Title));
+    }
+
+    /// <summary>The other direction: a VPN / program account (often a domain account) used for a website.</summary>
+    private async void UseForSite(VaultEntry source)
+    {
+        if (!await ConfirmLeaveEditorAsync()) return;
+        var entry = new VaultEntry { Category = EntryCategory.Web, Folder = source.Folder, Notes = Loc.F("Vault.CopiedFromNote", source.Title) };
+        var editor = OpenEditor(entry, isNew: true);
+        editor.CopyCredentials(source);
+        editor.FocusAddress();
         App.Instance.Main.ShowToast(Loc.F("Editor.TakenFrom", source.Title));
     }
 
@@ -593,5 +608,29 @@ public partial class VaultView : UserControl
 
     private void Lock_Click(object sender, RoutedEventArgs e) => App.Instance.Lock();
 
+    private void Splitter_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+    {
+        App.Instance.Settings.SidebarWidth = Math.Round(SidebarColumn.ActualWidth);
+        App.Instance.Settings.ListWidth = Math.Round(ListColumn.ActualWidth);
+        App.Instance.Settings.Save();
+    }
+
     private async void Help_Click(object sender, RoutedEventArgs e) => await HelpDialog.ShowAsync();
+
+    /// <summary>User menu: lock, sign out, delete the user.</summary>
+    private void User_Click(object sender, RoutedEventArgs e)
+    {
+        var menu = new ContextMenu { PlacementTarget = UserButton, Placement = System.Windows.Controls.Primitives.PlacementMode.Top };
+        MenuItem Item(string icon, string text, Action click)
+        {
+            var item = new MenuItem { Header = text, Icon = new TextBlock { Text = icon } };
+            item.Click += (_, _) => click();
+            return item;
+        }
+        menu.Items.Add(Item("\uE72E", Loc.T("Profile.Lock"), App.Instance.Lock));
+        menu.Items.Add(Item("\uE7E8", Loc.T("Profile.SignOut"), async () => await ProfileActions.SignOutAsync()));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(Item("\uE74D", Loc.T("Profile.Delete"), async () => await ProfileActions.DeleteAsync()));
+        menu.IsOpen = true;
+    }
 }

@@ -244,45 +244,10 @@ namespace PassKeeper.Setup
             }
         }
 
-        /// <summary>Asks a running PassKeeper of the current user to exit and waits for processes from the target folder.</summary>
+        /// <summary>Closes the copies started from the target folder (other copies keep running).</summary>
         internal static void StopRunningInstance(string exe)
         {
-            try
-            {
-                using (var client = new NamedPipeClientStream(".", InstallLayout.PipeName(), PipeDirection.Out))
-                {
-                    client.Connect(800);
-                    using (var w = new StreamWriter(client))
-                    {
-                        w.WriteLine("EXIT");
-                        w.Flush();
-                    }
-                }
-            }
-            catch (Exception)
-            {
-                // not running
-            }
-
-            var deadline = DateTime.UtcNow.AddSeconds(8);
-            while (DateTime.UtcNow < deadline)
-            {
-                var running = Process.GetProcessesByName("PassKeeper").Where(p => SameExe(p, exe)).ToList();
-                if (running.Count == 0) return;
-                Thread.Sleep(300);
-            }
-        }
-
-        private static bool SameExe(Process p, string exe)
-        {
-            try
-            {
-                return InstallLayout.SamePath(p.MainModule.FileName, exe);
-            }
-            catch (Exception)
-            {
-                return false; // other user's process (no access) - its files are renamed if locked
-            }
+            RunningCopies.Close(Path.GetDirectoryName(exe));
         }
 
         public static void LaunchApp(bool allUsers, string dir)

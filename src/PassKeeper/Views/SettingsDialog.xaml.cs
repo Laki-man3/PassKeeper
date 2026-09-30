@@ -47,9 +47,11 @@ public partial class SettingsDialog : DialogBase
         Hotkey.Text = Settings.AutoTypeHotkey;
         Suggestions.IsChecked = Settings.SmartSuggestions;
         AutoLogin.IsChecked = Settings.AutoLogin;
+        AutoFillWeb.IsChecked = Settings.AutoFillWeb;
         Submit.IsChecked = Settings.SubmitAfterFill;
         Compatible.IsChecked = Settings.CompatibleTyping;
-        DataPath.Text = App.Instance.DataDirectory;
+        DataPath.Text = App.Instance.Vault.DataDirectory;
+        ProfileName.Text = App.Instance.Vault.UserName;
         AutoLock.Minimum = TimeSpan.FromSeconds(AppSettings.MinAutoLockSeconds);
         AutoLock.Value = TimeSpan.FromSeconds(Settings.AutoLockSeconds);
         UninstallButton.Visibility = !AppPaths.IsPortable && (AppPaths.IsUserInstall || AppPaths.IsMachineInstall) &&
@@ -122,6 +124,7 @@ public partial class SettingsDialog : DialogBase
         Settings.LockOnWindowsLock = LockOnWindowsLock.IsChecked == true;
         Settings.SmartSuggestions = Suggestions.IsChecked == true;
         Settings.AutoLogin = AutoLogin.IsChecked == true;
+        Settings.AutoFillWeb = AutoFillWeb.IsChecked == true;
         Settings.SubmitAfterFill = Submit.IsChecked == true;
         Settings.CompatibleTyping = Compatible.IsChecked == true;
         Settings.AutoLockSeconds = (int)AutoLock.EffectiveValue.TotalSeconds;
@@ -187,8 +190,12 @@ public partial class SettingsDialog : DialogBase
             App.Instance.Main.ShowToast(Loc.F("Common.ErrorFormat", Shared.InstallLayout.UninstallerName), error: true);
     }
 
+    private async void SignOut_Click(object sender, RoutedEventArgs e) => await ProfileActions.SignOutAsync();
+
+    private async void DeleteProfile_Click(object sender, RoutedEventArgs e) => await ProfileActions.DeleteAsync();
+
     private void OpenFolder_Click(object sender, RoutedEventArgs e) =>
-        Process.Start(new ProcessStartInfo("explorer.exe", $"\"{App.Instance.DataDirectory}\"") { UseShellExecute = true });
+        Process.Start(new ProcessStartInfo("explorer.exe", $"\"{App.Instance.Vault.DataDirectory}\"") { UseShellExecute = true });
 
     private void Backup_Click(object sender, RoutedEventArgs e)
     {

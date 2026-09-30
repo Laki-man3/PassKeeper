@@ -62,6 +62,14 @@ public sealed class KeyboardSender
         }
     }
 
+    /// <summary>Shift+Tab: back to the previous field.</summary>
+    public void ShiftTab()
+    {
+        CheckTarget();
+        Send(Key(0x10, false, false), Key(0x09, false, false), Key(0x09, false, true), Key(0x10, false, true));
+        Pause();
+    }
+
     public void PressKey(string name)
     {
         CheckTarget();

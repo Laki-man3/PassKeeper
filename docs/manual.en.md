@@ -12,6 +12,15 @@ PassKeeper keeps passwords encrypted on this computer only and never uses the ne
 
 The interface language is switched with "Русский / English" in the top right corner of the first-run screen and in **Settings → General**.
 
+## Users: sign out, sign in, delete {#users}
+
+One computer can have several local users, each with a vault, PIN and backups of their own.
+
+- **Sign out**: click the name at the bottom of the left pane, the link on the PIN screen, or **Settings → Profile**. The PIN is deleted; the passwords stay on the computer.
+- **Sign in**: the sign-in screen asks for the user name (click it in the list) and the master password. A new PIN is set afterwards.
+- **Create a new user**: the link on the sign-in screen.
+- **Delete the user**: **Settings → Profile → Delete user…**, confirmed with the master password. This user's vault, PIN and backups are erased permanently; other users are not affected.
+
 ## Vault and sections {#sections}
 
 Left pane:
@@ -30,6 +39,8 @@ Left pane:
 The section is chosen in the entry editor. Entries of older versions and imported entries get a section automatically: an entry with a VPN client goes to "VPN and remote access", one with program windows to "Programs", one with a web address to "Websites".
 
 Search (Ctrl+F) looks in the title, login, addresses, e-mail, phone, notes, folder and visible custom fields.
+
+The borders between the left pane, the list and the entry card can be dragged with the mouse; the widths are remembered.
 
 ## Adding and editing entries {#entries}
 
@@ -59,6 +70,7 @@ Login, password, notes and custom fields for Wi-Fi, licences and the like.
 
 - **⋯ → Duplicate** (or right-click an entry) opens a copy marked "(copy)" in the editor.
 - **⋯ → Use for a VPN client or program…**: choose the client and a new entry for it opens with the login and password of the original. Add what is missing (PIN, server address) in the editor.
+- **⋯ → Use for a website…** (on VPN and program entries) is the other direction: a new site entry with the same login and password; only the address is left to fill in.
 - **Take login and password from another entry…** in the editor copies the login, password, e-mail and 2FA secret of the chosen entry.
 
 ### Changing a password in several entries {#password-sync}
@@ -71,7 +83,13 @@ The key button next to the password or **Password generator** in the left pane: 
 
 ## Autofill in browsers {#browser}
 
-When the cursor enters a login, password, e-mail, phone, one-time code or key field, a PassKeeper suggestion with matching entries appears next to it. Clicking an entry fills the field; for a login or password field both are filled.
+**Automatically.** When a sign-in page puts the cursor into an empty login or password field and exactly one entry matches the site, the login and password are filled in by themselves. Each page is filled once; fields the browser or you already filled are left alone. Enter is pressed only with **Press Enter after filling** on. Turned off in **Settings → Autofill → Fill in sites automatically**.
+
+**Several accounts on one site.** When two or more entries match, nothing is typed automatically: a list appears next to the field and you choose. The entry used last is on top. Ctrl+Alt+A opens the chooser in this case.
+
+**Suggestion.** When the cursor enters a login, password, e-mail, phone, one-time code or key field, a PassKeeper suggestion with matching entries appears next to it. Clicking an entry fills the field; for a login or password field both are filled.
+
+**A site without an entry.** The password field offers **Choose an entry…**: any entry will do, for example a VPN account for the company portal. With **Remember the choice for …** ticked, the site's address is added to that entry, so next time it is filled in by itself. The Ctrl+Alt+A chooser offers the same.
 
 - An entry matches when the page address is the entry's address or one of its **Other addresses of this site**.
 - While the vault is locked the suggestion offers to unlock it with the PIN.
@@ -230,7 +248,8 @@ On every save the previous vault is kept as `vault.pkv.bak`, and once a day a co
 |---|---|
 | General | language, appearance (dark, light, as Windows), start with Windows, minimize to tray |
 | Security | auto-lock, clipboard clearing, lock with Windows, change master password and PIN |
-| Autofill | hotkey, suggestions at fields, automatic sign-in, Enter after filling, compatibility typing mode, delay between keystrokes |
+| Autofill | hotkey, suggestions at fields, automatic filling of sites, automatic sign-in, Enter after filling, compatibility typing mode, delay between keystrokes |
+| Profile | sign out, delete the user |
 | Data | vault folder, backup |
 | About | version, installation mode, uninstall |
 
@@ -242,7 +261,7 @@ On every save the previous vault is kept as `vault.pkv.bak`, and once a day a co
 - **All users**: administrator rights, `%ProgramFiles%\PassKeeper`.
 - **Portable**: unpack the archive into any folder; data is stored next to it in `Data`.
 
-Uninstall: **Start → PassKeeper → Uninstall PassKeeper**, **Settings → Apps**, **Settings → About** in PassKeeper, or `Uninstall.exe` in the program folder. The user's data (`%APPDATA%\PassKeeper`) is removed only when **Also remove my data** is ticked.
+Uninstall: **Start → PassKeeper → Uninstall PassKeeper**, **Settings → Apps**, **Settings → About** in PassKeeper, or `Uninstall.exe` in the program folder. The user's data (`%APPDATA%\PassKeeper`) is removed only when **Also remove my data** is ticked. Copies of PassKeeper started from the program folder are closed automatically, and the program is removed from startup as well.
 
 Silent install and uninstall:
 
@@ -280,6 +299,8 @@ Uninstall.exe /S
 **Several accounts of one VPN.** Set **Server address** in each entry: automatic sign-in and suggestions use the entry whose address is in the window title.
 
 **Automatic sign-in is paused.** There were 2 attempts in 10 minutes. Check the password in the entry; automatic sign-in is available again after 10 minutes, and Ctrl+Alt+A types the data meanwhile.
+
+**A VPN client behaves differently while PassKeeper runs.** In the background PassKeeper only receives focus notifications and does not query program windows until you ask (suggestion, Ctrl+Alt+A, automatic sign-in). If the problem remains, turn off **Suggestions at login fields** and report the error text.
 
 **Forgotten PIN.** Sign in with the master password (**Use master password** on the lock screen) and set a new PIN in Settings.
 

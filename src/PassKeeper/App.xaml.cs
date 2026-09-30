@@ -20,6 +20,7 @@ public partial class App : Application
     private IdleMonitor? _idle;
     private FocusWatcher? _watcher;
     private AutoLoginService? _autoLogin;
+    private BrowserTitleWatcher? _pages;
     private SuggestionPopup? _popup;
 
     public App(StartupOptions options, SingleInstance? instance)
@@ -32,6 +33,11 @@ public partial class App : Application
 
     public string DataDirectory { get; private set; } = "";
     public VaultService Vault { get; private set; } = null!;
+    /// <summary>Local users of this data folder (each with its own vault, PIN and backups).</summary>
+    public ProfileStore Profiles { get; private set; } = null!;
+    /// <summary>A user is signed in (possibly locked behind the PIN); false after "sign out".</summary>
+    public bool HasProfile => !string.IsNullOrEmpty(Settings.ActiveProfile) && Vault.Exists;
+    private string _profileId = "";
     public AppSettings Settings { get; private set; } = new();
     public MainWindow Main { get; private set; } = null!;
     public TrayService? Tray { get; private set; }
@@ -57,8 +63,13 @@ public partial class App : Application
         ThemeService.Initialize();
         ThemeService.Apply(Settings.Theme);
 
-        Vault = new VaultService(DataDirectory);
-        Vault.StateChanged += (_, _) => Dispatcher.BeginInvoke(OnVaultStateChanged);
+        Profiles = new ProfileStore(DataDirectory);
+        if (Profiles.MigrateLegacy() is { } migrated)
+        {
+            Settings.ActiveProfile = migrated;
+            Settings.Save();
+        }
+        UseProfile(Profiles.Find(Settings.ActiveProfile)?.Id ?? Profiles.NewId());
         AutoType = new AutoTypeService(this);
         Main = new MainWindow
         {
@@ -93,7 +104,6 @@ public partial class App : Application
 
         _idle = new IdleMonitor { Period = TimeSpan.FromSeconds(Settings.AutoLockSeconds) };
         _idle.Timeout += OnIdleTimeout;
-        _idle.Start();
 
         _watcher = new FocusWatcher();
         _watcher.LoginFieldFocused += OnLoginFieldFocused;
@@ -101,11 +111,13 @@ public partial class App : Application
         {
             if (_popup is { IsMouseOver: false }) _popup.HidePopup();
         });
+        _pages = new BrowserTitleWatcher();
+        _pages.PageChanged += () => _watcher?.ProbeNow();
+        _watcher.BrowserSeen += pid => Dispatcher.BeginInvoke(() => _pages?.Watch(pid));
         if (Settings.SmartSuggestions) _watcher.Start();
 
         _autoLogin = new AutoLoginService(this);
         if (Settings.AutoLogin) _autoLogin.Start();
-        Vault.DataChanged += (_, _) => Dispatcher.BeginInvoke(() => _autoLogin?.UpdateTriggers());
 
         SystemEvents.SessionSwitch += OnSessionSwitch;
         _instance?.Listen(cmd => Dispatcher.BeginInvoke(() => OnRemoteCommand(cmd)));
@@ -115,18 +127,112 @@ public partial class App : Application
         CleanupAfterUpdate();
         ShowStartPage();
         UpdateTray();
-        if (!(_options.Minimized && Vault.Exists)) ShowMainWindow();
+        Main.IsVisibleChanged += (_, _) =>
+        {
+            if (!Main.IsVisible) MemoryTrimmer.TrimSoon();
+        };
+        Main.StateChanged += (_, _) =>
+        {
+            if (Main.WindowState == WindowState.Minimized) MemoryTrimmer.TrimSoon();
+        };
+        if (!(_options.Minimized && HasProfile)) ShowMainWindow();
+        else MemoryTrimmer.TrimSoon();
         if (!hotkeyOk)
             Tray.ShowBalloon("PassKeeper", Loc.F("Tray.HotkeyFailed", Settings.AutoTypeHotkey));
     }
 
     // ------------------------------------------------------------------ navigation / state
 
+    // ------------------------------------------------------------------ users
+
+    /// <summary>Switches to the vault of a user (an existing one or one being registered).</summary>
+    private void UseProfile(string id)
+    {
+        if (Vault != null)
+        {
+            Vault.StateChanged -= OnVaultStateEvent;
+            Vault.DataChanged -= OnVaultDataEvent;
+        }
+        _profileId = id;
+        Vault = new VaultService(Profiles.DirectoryOf(id));
+        Vault.StateChanged += OnVaultStateEvent;
+        Vault.DataChanged += OnVaultDataEvent;
+    }
+
+    private void OnVaultStateEvent(object? sender, EventArgs e) => Dispatcher.BeginInvoke(OnVaultStateChanged);
+
+    private void OnVaultDataEvent(object? sender, EventArgs e) => Dispatcher.BeginInvoke(() => _autoLogin?.UpdateTriggers());
+
+    /// <summary>Registration screen: the vault it creates is a new user.</summary>
+    public void PrepareNewProfile()
+    {
+        if (Vault.Exists) UseProfile(Profiles.NewId());
+    }
+
+    public enum LoginResult { Ok, UnknownUser, WrongPassword }
+
+    /// <summary>Sign in with user name and master password (after "sign out" or for another user).</summary>
+    public async Task<LoginResult> LoginAsync(string userName, string masterPassword)
+    {
+        var profile = Profiles.FindByName(userName);
+        if (profile == null) return LoginResult.UnknownUser;
+        UseProfile(profile.Id);
+        var vault = Vault;
+        // Success raises StateChanged: the user becomes the signed-in one and is asked for a new PIN.
+        return await Task.Run(() => vault.UnlockWithMaster(masterPassword)) ? LoginResult.Ok : LoginResult.WrongPassword;
+    }
+
+    /// <summary>
+    /// Sign out: the PIN of this user is deleted and the vault locked; signing in again takes the user name and the
+    /// master password, then a new PIN.
+    /// </summary>
+    public void Logout()
+    {
+        var vault = Vault;
+        Settings.ActiveProfile = "";
+        Settings.AutoLoginTriggers = [];
+        Settings.Save();
+        UseProfile(_profileId); // detach the events of the signed-out vault
+        vault.RemovePin();
+        if (vault.IsUnlocked) vault.Lock();
+        EndSession();
+        ShowStartPage();
+        UpdateTray();
+    }
+
+    /// <summary>Deletes the current user with the vault, PIN and backups.</summary>
+    public void DeleteCurrentProfile()
+    {
+        var id = _profileId;
+        var vault = Vault;
+        Settings.ActiveProfile = "";
+        Settings.AutoLoginTriggers = [];
+        Settings.Save();
+        UseProfile(Profiles.NewId());
+        if (vault.IsUnlocked) vault.Lock();
+        EndSession();
+        Profiles.Delete(id);
+        ShowStartPage();
+        UpdateTray();
+    }
+
+    /// <summary>What locking does besides the vault itself: clipboard, suggestion, dialogs, inactivity timer, memory.</summary>
+    private void EndSession()
+    {
+        ClipboardService.ClearIfOurs();
+        _popup?.HidePopup();
+        Main.CloseAllDialogs();
+        _idle?.Stop();
+        MemoryTrimmer.TrimSoon();
+    }
+
     public void ShowStartPage()
     {
-        if (!Vault.Exists)
+        if (!HasProfile)
         {
-            if (Main.CurrentPage is not SetupView) Main.Navigate(new SetupView());
+            if (Main.CurrentPage is LoginView or SetupView) return;
+            if (Profiles.List().Count > 0) Main.Navigate(new LoginView());
+            else Main.Navigate(new SetupView());
         }
         else if (!Vault.IsUnlocked)
         {
@@ -147,13 +253,16 @@ public partial class App : Application
         if (SuppressAutoNavigation) return;
         if (!Vault.IsUnlocked)
         {
-            ClipboardService.ClearIfOurs();
-            _popup?.HidePopup();
-            Main.CloseAllDialogs();
+            EndSession();
         }
         else
         {
-            _idle?.Reset();
+            if (Settings.ActiveProfile != _profileId)
+            {
+                Settings.ActiveProfile = _profileId; // registered or signed in
+                Settings.Save();
+            }
+            _idle?.Start();
             _autoLogin?.UpdateTriggers();
         }
         ShowStartPage();
@@ -227,6 +336,7 @@ public partial class App : Application
         {
             SaveWindowSize();
             _watcher?.Dispose();
+            _pages?.Dispose();
             _autoLogin?.Dispose();
             Hotkeys?.Dispose();
             _idle?.Dispose();
@@ -277,7 +387,7 @@ public partial class App : Application
         var target = TargetDetector.Capture(field.Window, detectUrl: true, focused: field.Element);
         Dispatcher.BeginInvoke(async () =>
         {
-            if (!Vault.Exists || IsExiting) return;
+            if (!HasProfile || IsExiting) return;
             if (_autoLogin != null && await _autoLogin.TryWindowAsync(field.Window, field))
             {
                 _popup?.HidePopup();
@@ -291,17 +401,28 @@ public partial class App : Application
             }
             var all = EntryMatcher.Match(Vault.ActiveEntries, target.ToContext());
             var matches = all.Select(m => m.Entry).Where(e => AutoTypeService.CanFill(e, field.Kind)).ToList();
+            if (matches.Count == 1 && target.IsBrowser && Settings.AutoFillWeb &&
+                await AutoType.TryAutoFillWebAsync(matches[0], field, target))
+            {
+                _popup.HidePopup();
+                return;
+            }
             if (matches.Count > 0)
             {
+                // Several accounts for one site: the user chooses (the one used last is on top).
                 _popup.ShowEntries(field, target, matches);
+                return;
+            }
+            if (all.Count == 0 && target.IsBrowser && field.IsPassword)
+            {
+                _popup.ShowChoose(field, target);
                 return;
             }
             // A program without any entry: offer to create one when it is a known client or asks for a password / PIN.
             if (all.Count == 0 && !target.IsBrowser)
             {
                 var known = KnownApps.Match(target.ProcessName, target.Title);
-                var form = known == null ? await Task.Run(() => ClientDetector.InspectForm(field.Window)) : SignInForm.None;
-                if (known != null || form.HasPassword || form.HasPin)
+                if (known != null || field.Kind is FieldKind.Password or FieldKind.Pin)
                 {
                     _popup.ShowCreate(field, target, known?.Name ?? target.Describe());
                     return;
@@ -318,6 +439,15 @@ public partial class App : Application
         popup.UnlockRequested += async field =>
         {
             if (await QuickUnlockWindow.ShowAsync(null)) Native.ForceForeground(field.Window);
+        };
+        popup.ChooseRequested += async (field, target) =>
+        {
+            var (entry, remember) = await AutoTypePickerWindow.PickAsync(target, [], Vault.ActiveEntries);
+            Native.ForceForeground(field.Window);
+            if (entry == null) return;
+            if (remember) entry = AutoType.Associate(entry, target);
+            await Task.Delay(150);
+            await AutoType.FillFieldAsync(entry, field);
         };
         popup.CreateRequested += async field =>
         {

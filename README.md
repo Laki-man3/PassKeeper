@@ -10,12 +10,11 @@ Offline password manager for Windows. No network access, no cloud, no telemetry.
 
 ![PassKeeper](docs/screenshots/en/vault.png)
 
-| | |
-|---|---|
-| ![Entry for a detected client](docs/screenshots/en/detected.png) | ![VPN entry](docs/screenshots/en/editor.png) |
-| ![Auto-type: windows and sequence](docs/screenshots/en/autotype.png) | ![Built-in help](docs/screenshots/en/help.png) |
-| ![Settings: auto-lock dial](docs/screenshots/en/settings.png) | ![Autofill suggestion](docs/screenshots/en/autofill.png) |
-| ![Installer](docs/screenshots/en/installer.png) | ![Uninstaller](docs/screenshots/en/uninstaller.png) |
+| | | |
+|---|---|---|
+| ![Entry for a detected client](docs/screenshots/en/detected.png) | ![VPN entry](docs/screenshots/en/editor.png) | ![Auto-type: windows and sequence](docs/screenshots/en/autotype.png) |
+| ![Sign-in of a local user](docs/screenshots/en/login.png) | ![Autofill suggestion](docs/screenshots/en/autofill.png) | ![Settings: auto-lock dial](docs/screenshots/en/settings.png) |
+| ![Built-in help](docs/screenshots/en/help.png) | ![Installer](docs/screenshots/en/installer.png) | ![Uninstaller](docs/screenshots/en/uninstaller.png) |
 
 ### Specifications
 
@@ -24,7 +23,9 @@ Offline password manager for Windows. No network access, no cloud, no telemetry.
 | OS | Windows 10 (1903+), Windows 11, x64 |
 | Runtime | self-contained .NET 10; installer and uninstaller run on the built-in .NET Framework 4.8 |
 | Network | none |
-| Package size | installer 67 MB, installed 162 MB |
+| Package size | installer 67 MB, installed 161 MB |
+| Resource use | in the tray: ~15 MB working set, no CPU load while idle (no timers or animations while hidden) |
+| Users | several local users, each with its own vault, PIN and backups; sign out / sign in by name and master password |
 | Vault encryption | AES-256-GCM, random 256-bit vault key |
 | Key derivation | Argon2id, 64 MiB, 3 iterations, 4 lanes, 256-bit salt |
 | Integrity | file header authenticated as AAD; any modification is detected |
@@ -32,22 +33,25 @@ Offline password manager for Windows. No network access, no cloud, no telemetry.
 | Auto-lock | after 8 h of inactivity by default; any period from 10 s to 24 h, set to the second on a dial; optionally on Windows lock |
 | Clipboard | cleared after 30 s (10–60 s / never), excluded from clipboard history and cloud sync |
 | Backups | previous version + daily copies for 14 days (encrypted) |
-| Autofill | UI Automation / MSAA field detection, SendInput typing; browsers (verified in Chrome 153, Firefox 156) and desktop sign-in clients: VPN, VDI, RDP, token PIN prompts |
+| Autofill | UI Automation / MSAA field detection, SendInput typing; websites filled automatically when the sign-in page opens (verified in Chrome 154, Firefox 156); desktop sign-in clients: VPN, VDI, RDP, token PIN prompts |
 | Automatic sign-in | when a client's sign-in window appears; at most 2 attempts per entry in 10 minutes |
 | Auto-type hotkey | Ctrl+Alt+A (configurable) |
 | Import | 25+ sources, see below |
 | Export | 13 formats |
 | UI languages | English, Russian |
 | Help | built-in user guide (works offline) |
-| Tests | 97 unit tests |
+| Tests | 99 unit tests |
 
 ### Features
 
 - Sections: Websites, VPN and remote access, Programs, Other. The editor shows the fields of the section; entries of older versions get their section automatically.
 - Entry fields: title, login, password, URLs, e-mail, phone, key/token, token PIN, TOTP, notes, folders, favorites, custom (hidden) fields, password history, trash.
 - Duplicate an entry, or copy a site's login and password into an entry for a VPN client or program. When a password changes, entries that still use the old one can be updated at once.
-- First run: local profile with master password, then mandatory PIN. Later starts and inactivity locks ask for the PIN only.
-- Autofill: a suggestion appears next to a focused login, password, e-mail, phone, one-time code, PIN or key field in any browser or desktop application. The auto-type hotkey matches the active site or window and fills its fields one by one.
+- Users: first run creates a local user (name + master password), then a mandatory PIN; later starts and inactivity locks ask for the PIN only. Sign out deletes the PIN; signing in again takes the name and master password and a new PIN. Deleting a user in Settings erases that user's vault, PIN and backups. Data of earlier versions becomes the first user.
+- Websites: when a sign-in page opens and one entry matches the site, the login and password are filled in by themselves (once per page, fields the user has typed in are left alone). Several entries for the site: a list to choose from, the last used first. No entry: pick any entry, optionally remembering the site for it.
+- Entries work both ways: a site's login and password can be copied into an entry for a VPN client or program, and any VPN or program entry can be used on a website ("Use for a website…").
+- Autofill in applications: a suggestion appears next to a focused login, password, e-mail, phone, one-time code, PIN or key field. The auto-type hotkey matches the active site or window and fills its fields one by one.
+- Resizable layout: the borders between sections, the entry list and the details can be dragged; widths are remembered.
 - Password generator, strength estimate, weak/reused password overview.
 - Tray, autostart (no administrator rights), dark/light/system theme.
 
@@ -85,7 +89,7 @@ Chrome 127+ protects newly saved passwords with App-Bound Encryption, which thir
 ### Installation
 
 ```bat
-PassKeeper-Setup-1.2.0.exe
+PassKeeper-Setup-1.3.0.exe
 ```
 
 | Mode | Location | Rights |
@@ -99,16 +103,16 @@ The autostart and language chosen in the installer are used on the first run.
 Silent install: `/S`, `/allusers` or `/currentuser`, `/desktop`, `/autostart` or `/noautostart`, `/nolaunch`, `"/dir=path"`, `/lang=en|ru`. Exit codes: 0 ok, 1 error, 740 elevation required, 1602 cancelled.
 
 ```bat
-PassKeeper-Setup-1.2.0.exe /S /allusers /desktop /autostart
+PassKeeper-Setup-1.3.0.exe /S /allusers /desktop /autostart
 ```
 
 ### Uninstall
 
-`Uninstall.exe` in the installation folder, Start menu → PassKeeper → Uninstall PassKeeper, Settings → Apps, or PassKeeper → Settings → About. Program files, shortcuts, autostart and registry entries are removed; the user's data in `%APPDATA%\PassKeeper` is removed only when **Also remove my data** is checked.
+`Uninstall.exe` in the installation folder, Start menu → PassKeeper → Uninstall PassKeeper, Settings → Apps, or PassKeeper → Settings → About. PassKeeper copies running from the installation folder are closed first; program files, shortcuts, autostart (including its Task Manager entry) and registry entries are removed; the user's data in `%APPDATA%\PassKeeper` is removed only when **Also remove my data** is checked.
 
 Silent: `Uninstall.exe /S` (data kept), `Uninstall.exe /S /removedata`.
 
-Data: `%APPDATA%\PassKeeper` — `vault.pkv`, `pin.dat` (DPAPI), `settings.json`, `Backups\`. Override with `--data <dir>`; a copy started with its own data folder runs as a separate instance.
+Data: `%APPDATA%\PassKeeper` — `settings.json`, `profiles\<user>\` with `vault.pkv`, `pin.dat` (DPAPI), `Backups\`. Override with `--data <dir>`; a copy started with its own data folder runs as a separate instance.
 
 ### Build
 
@@ -132,6 +136,7 @@ Output in `dist\<version>\`: installer, portable zip, `SHA256SUMS.txt`, `7z\` vo
 
 - Simulated input cannot reach applications running as SYSTEM; applications running as administrator need PassKeeper started as administrator too. In both cases the clipboard fallback is used.
 - Sign-in clients were checked against dialogs with the same structure (Cisco and Check Point login forms, token PIN prompt); vendor builds may differ.
+- Automatic filling on websites needs fields exposed through the browser's accessibility interface (regular HTML inputs); for other forms use the hotkey.
 - Binaries are not code-signed.
 - The master password cannot be recovered.
 
@@ -141,12 +146,11 @@ Output in `dist\<version>\`: installer, portable zip, `SHA256SUMS.txt`, `7z\` vo
 
 ![PassKeeper](docs/screenshots/ru/vault.png)
 
-| | |
-|---|---|
-| ![Запись для обнаруженного клиента](docs/screenshots/ru/detected.png) | ![Запись VPN](docs/screenshots/ru/editor.png) |
-| ![Автоввод: окна и последовательность](docs/screenshots/ru/autotype.png) | ![Встроенная справка](docs/screenshots/ru/help.png) |
-| ![Настройки: циферблат автоблокировки](docs/screenshots/ru/settings.png) | ![Подсказка автозаполнения](docs/screenshots/ru/autofill.png) |
-| ![Установщик](docs/screenshots/ru/installer.png) | ![Деинсталлятор](docs/screenshots/ru/uninstaller.png) |
+| | | |
+|---|---|---|
+| ![Запись для обнаруженного клиента](docs/screenshots/ru/detected.png) | ![Запись VPN](docs/screenshots/ru/editor.png) | ![Автоввод: окна и последовательность](docs/screenshots/ru/autotype.png) |
+| ![Вход локального пользователя](docs/screenshots/ru/login.png) | ![Подсказка автозаполнения](docs/screenshots/ru/autofill.png) | ![Настройки: циферблат автоблокировки](docs/screenshots/ru/settings.png) |
+| ![Встроенная справка](docs/screenshots/ru/help.png) | ![Установщик](docs/screenshots/ru/installer.png) | ![Деинсталлятор](docs/screenshots/ru/uninstaller.png) |
 
 ### Характеристики
 
@@ -155,7 +159,9 @@ Output in `dist\<version>\`: installer, portable zip, `SHA256SUMS.txt`, `7z\` vo
 | ОС | Windows 10 (1903+), Windows 11, x64 |
 | Среда выполнения | встроенная .NET 10; установщик и деинсталлятор работают на штатном .NET Framework 4.8 |
 | Сеть | не используется |
-| Размер | установщик 67 МБ, после установки 162 МБ |
+| Размер | установщик 67 МБ, после установки 161 МБ |
+| Потребление ресурсов | в трее: ~15 МБ рабочего набора, без нагрузки на процессор в простое (скрытое окно не держит таймеров и анимаций) |
+| Пользователи | несколько локальных пользователей, у каждого своё хранилище, PIN и резервные копии; выход и вход по имени и мастер-паролю |
 | Шифрование хранилища | AES-256-GCM, случайный 256-битный ключ |
 | Формирование ключа | Argon2id, 64 МиБ, 3 прохода, 4 потока, соль 256 бит |
 | Целостность | заголовок файла аутентифицируется (AAD), любое изменение обнаруживается |
@@ -163,22 +169,25 @@ Output in `dist\<version>\`: installer, portable zip, `SHA256SUMS.txt`, `7z\` vo
 | Автоблокировка | по умолчанию через 8 ч бездействия; любой срок от 10 с до 24 ч с точностью до секунды на циферблате; опционально при блокировке Windows |
 | Буфер обмена | очистка через 30 с (10–60 с / никогда), исключение из журнала и облачной синхронизации |
 | Резервные копии | предыдущая версия + ежедневные копии за 14 дней (зашифрованы) |
-| Автозаполнение | поиск полей через UI Automation / MSAA, ввод через SendInput; браузеры (проверено в Chrome 153, Firefox 156) и клиенты входа: VPN, VDI, RDP, запросы PIN токенов |
+| Автозаполнение | поиск полей через UI Automation / MSAA, ввод через SendInput; сайты заполняются сами при открытии страницы входа (проверено в Chrome 154, Firefox 156); клиенты входа: VPN, VDI, RDP, запросы PIN токенов |
 | Автовход | при появлении окна входа клиента; не больше 2 попыток на запись за 10 минут |
 | Горячая клавиша автоввода | Ctrl+Alt+A (настраивается) |
 | Импорт | 25+ источников, см. ниже |
 | Экспорт | 13 форматов |
 | Языки интерфейса | русский, английский |
 | Справка | встроенное руководство (работает без сети) |
-| Тесты | 97 модульных тестов |
+| Тесты | 99 модульных тестов |
 
 ### Возможности
 
 - Разделы: Сайты, VPN и удалённый доступ, Программы, Другое. Редактор показывает поля выбранного раздела; записям из прежних версий раздел назначается автоматически.
 - Поля записи: название, логин, пароль, адреса сайтов, e-mail, телефон, ключ/токен, PIN токена, TOTP, заметки, папки, избранное, дополнительные (скрытые) поля, история паролей, корзина.
 - Дублирование записи и копирование логина и пароля сайта в запись для VPN‑клиента или программы. При смене пароля записи со старым паролем можно обновить сразу.
-- Первый запуск: локальный профиль с мастер-паролем, затем обязательный PIN. При следующих запусках и после автоблокировки запрашивается только PIN.
-- Автозаполнение: подсказка появляется рядом с полем логина, пароля, e-mail, телефона, одноразового кода, PIN или ключа в любом браузере и программе. Горячая клавиша подбирает запись по сайту или окну и заполняет поля по отдельности.
+- Пользователи: при первом запуске создаётся локальный пользователь (имя + мастер-пароль), затем обязательный PIN; при следующих запусках и после автоблокировки запрашивается только PIN. Выход из пользователя удаляет PIN; при повторном входе нужны имя и мастер-пароль и новый PIN. Удаление пользователя в настройках стирает его хранилище, PIN и резервные копии. Данные прежних версий становятся первым пользователем.
+- Сайты: при открытии страницы входа, если сайту соответствует одна запись, логин и пароль подставляются сами (один раз на страницу, поля, в которые пользователь уже что-то ввёл, не трогаются). Несколько записей для сайта — список для выбора, последняя использованная сверху. Записи нет — можно выбрать любую и запомнить для неё этот сайт.
+- Записи работают в обе стороны: логин и пароль сайта копируются в запись VPN‑клиента или программы, а запись VPN или программы можно использовать на сайте («Использовать для сайта…»).
+- Автозаполнение в программах: подсказка появляется рядом с полем логина, пароля, e-mail, телефона, одноразового кода, PIN или ключа. Горячая клавиша подбирает запись по сайту или окну и заполняет поля по отдельности.
+- Размеры панелей: границы между разделами, списком записей и карточкой перетаскиваются мышью; ширина запоминается.
 - Генератор паролей, оценка стойкости, обзор слабых и повторяющихся паролей.
 - Трей, автозапуск (без прав администратора), тёмная/светлая/системная тема.
 
@@ -216,7 +225,7 @@ Chrome 127+ шифрует новые пароли App-Bound Encryption, нед�
 ### Установка
 
 ```bat
-PassKeeper-Setup-1.2.0.exe
+PassKeeper-Setup-1.3.0.exe
 ```
 
 | Режим | Папка | Права |
@@ -230,16 +239,16 @@ PassKeeper-Setup-1.2.0.exe
 Тихая установка: `/S`, `/allusers` или `/currentuser`, `/desktop`, `/autostart` или `/noautostart`, `/nolaunch`, `"/dir=путь"`, `/lang=ru|en`. Коды возврата: 0 — успех, 1 — ошибка, 740 — нужны права администратора, 1602 — отменено.
 
 ```bat
-PassKeeper-Setup-1.2.0.exe /S /allusers /desktop /autostart
+PassKeeper-Setup-1.3.0.exe /S /allusers /desktop /autostart
 ```
 
 ### Удаление
 
-`Uninstall.exe` в папке программы, Пуск → PassKeeper → Удалить PassKeeper, Параметры → Приложения или PassKeeper → Настройки → О программе. Удаляются файлы программы, ярлыки, автозапуск и записи реестра; данные пользователя в `%APPDATA%\PassKeeper` удаляются, только если отмечено **Удалить также мои данные**.
+`Uninstall.exe` в папке программы, Пуск → PassKeeper → Удалить PassKeeper, Параметры → Приложения или PassKeeper → Настройки → О программе. Сначала закрываются копии PassKeeper, запущенные из папки установки; затем удаляются файлы программы, ярлыки, автозапуск (в том числе строка в диспетчере задач) и записи реестра; данные пользователя в `%APPDATA%\PassKeeper` удаляются, только если отмечено **Удалить также мои данные**.
 
 Тихо: `Uninstall.exe /S` (данные сохраняются), `Uninstall.exe /S /removedata`.
 
-Данные: `%APPDATA%\PassKeeper` — `vault.pkv`, `pin.dat` (DPAPI), `settings.json`, `Backups\`. Другая папка: `--data <папка>`; копия со своей папкой данных работает отдельным экземпляром.
+Данные: `%APPDATA%\PassKeeper` — `settings.json`, `profiles\<пользователь>\` с `vault.pkv`, `pin.dat` (DPAPI), `Backups\`. Другая папка: `--data <папка>`; копия со своей папкой данных работает отдельным экземпляром.
 
 ### Сборка
 
@@ -263,5 +272,6 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1
 
 - Эмулированный ввод не доходит до программ, запущенных от имени SYSTEM; для программ, запущенных от имени администратора, PassKeeper тоже нужно запустить от имени администратора. В обоих случаях используется передача через буфер обмена.
 - Клиенты входа проверены на диалогах той же структуры (формы входа Cisco и Check Point, запрос PIN токена); сборки производителей могут отличаться.
+- Автозаполнение на сайтах работает с полями, которые браузер показывает через интерфейс специальных возможностей (обычные поля HTML); для остальных форм — горячая клавиша.
 - Исполняемые файлы не подписаны цифровой подписью.
 - Мастер-пароль не восстанавливается.

@@ -13,7 +13,14 @@
     <NoWarn>$(NoWarn);WFO0003</NoWarn>
     <!-- Offline product: no telemetry, no update checks, invariant globalization not used (RU/EN UI). -->
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!-- Small background footprint: no background GC thread, heap kept compact, no PGO instrumentation. -->
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <TieredPGO>false</TieredPGO>
   </PropertyGroup>
+
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="5" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- WPF and WinForms share type names; keep WinForms out of implicit usings (only NotifyIcon is used). -->

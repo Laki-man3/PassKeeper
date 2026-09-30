@@ -26,10 +26,10 @@ public sealed class VaultService
     private byte[]? _key;
     private VaultData? _data;
 
+    /// <summary>The folder is created with the vault (a profile that is only being set up leaves nothing behind).</summary>
     public VaultService(string dataDirectory)
     {
         DataDirectory = dataDirectory;
-        Directory.CreateDirectory(dataDirectory);
     }
 
     public string DataDirectory { get; }
@@ -67,6 +67,7 @@ public sealed class VaultService
     public void Create(string userName, string masterPassword)
     {
         if (Exists) throw new InvalidOperationException("A vault already exists.");
+        Directory.CreateDirectory(DataDirectory);
         if (masterPassword.Length < MinMasterPasswordLength)
             throw new ArgumentException("Master password is too short.", nameof(masterPassword));
 

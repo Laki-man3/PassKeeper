@@ -17,6 +17,7 @@ namespace PassKeeper.Windows;
 public sealed class AutoTypePickerWindow : Window
 {
     private readonly TaskCompletionSource<VaultEntry?> _result = new();
+    private readonly CheckBox? _remember;
     private readonly List<EntryItem> _matches;
     private readonly List<EntryItem> _all;
     private readonly TextBox _search = new();
@@ -26,6 +27,8 @@ public sealed class AutoTypePickerWindow : Window
 
     private AutoTypePickerWindow(TargetWindow target, List<EntryMatch> matches, IEnumerable<VaultEntry> all)
     {
+        // Nothing matched: whatever is chosen can be remembered for this site / program.
+        var rememberFor = matches.Count == 0 ? RememberLabel(target) : null;
         WindowStyle = WindowStyle.None;
         AllowsTransparency = true;
         Background = Brushes.Transparent;
@@ -64,6 +67,12 @@ public sealed class AutoTypePickerWindow : Window
         _hint.Text = Loc.T("Picker.Hint");
         DockPanel.SetDock(_hint, Dock.Bottom);
         dock.Children.Add(_hint);
+        if (rememberFor != null)
+        {
+            _remember = new CheckBox { Content = Loc.F("Picker.Remember", rememberFor), IsChecked = true, Margin = new Thickness(18, 8, 18, 0), Focusable = false };
+            DockPanel.SetDock(_remember, Dock.Bottom);
+            dock.Children.Add(_remember);
+        }
 
         _list.Style = (Style)FindResource("List.Plain");
         _list.ItemContainerStyle = (Style)FindResource("Item.Card");
@@ -171,14 +180,25 @@ public sealed class AutoTypePickerWindow : Window
         base.OnClosed(e);
     }
 
+    /// <summary>The site or program the chosen entry can be linked to, or null.</summary>
+    private static string? RememberLabel(TargetWindow target)
+    {
+        if (target.IsBrowser) return DomainUtil.GetHost(target.Url);
+        return target.ProcessName.Length > 0 ? target.ProcessName + ".exe" : null;
+    }
+
+    /// <summary>Whether the user asked to link the chosen entry to the site / program.</summary>
+    public bool Remember => _remember?.IsChecked == true;
+
     internal static AutoTypePickerWindow CreateForPreview(TargetWindow target, List<EntryMatch> matches, IEnumerable<VaultEntry> all) =>
         new(target, matches, all) { _closing = true };
 
-    public static Task<VaultEntry?> PickAsync(TargetWindow target, List<EntryMatch> matches, IEnumerable<VaultEntry> all)
+    public static async Task<(VaultEntry? Entry, bool Remember)> PickAsync(TargetWindow target, List<EntryMatch> matches, IEnumerable<VaultEntry> all)
     {
         var w = new AutoTypePickerWindow(target, matches, all);
         w.Show();
         w.Activate();
-        return w._result.Task;
+        var entry = await w._result.Task;
+        return (entry, w.Remember);
     }
 }

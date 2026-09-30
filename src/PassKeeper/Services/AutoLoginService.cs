@@ -40,6 +40,7 @@ public sealed class AutoLoginService : IDisposable
     private WinEventDelegate? _callback;
     private IntPtr _hook;
     private IntPtr _busyWindow;
+    private int _autoEntries;
 
     public AutoLoginService(App app)
     {
@@ -81,10 +82,12 @@ public sealed class AutoLoginService : IDisposable
     /// </summary>
     public async Task<bool> TryWindowAsync(IntPtr hwnd, LoginField? field)
     {
-        if (!_app.Settings.AutoLogin || _app.IsExiting || !_app.Vault.Exists) return false;
+        if (!_app.Settings.AutoLogin || _app.IsExiting || !_app.HasProfile) return false;
         var root = Native.GetAncestor(hwnd, GaRoot);
         if (root != IntPtr.Zero) hwnd = root;
         if (_busyWindow == hwnd || _app.AutoType.IsTyping) return true;
+        // Nothing to sign in to: return before looking at the window at all.
+        if (_app.Vault.IsUnlocked ? _autoEntries == 0 : _app.Settings.AutoLoginTriggers.Count == 0) return false;
         if (_busyWindow != IntPtr.Zero) return false;
         Expire();
         if (_done.ContainsKey(hwnd)) return false;
@@ -189,8 +192,10 @@ public sealed class AutoLoginService : IDisposable
     {
         if (!_app.Vault.IsUnlocked) return;
         var triggers = new SortedSet<string>(StringComparer.Ordinal);
+        _autoEntries = 0;
         foreach (var e in _app.Vault.ActiveEntries.Where(e => e.AutoLogin))
         {
+            _autoEntries++;
             if (KnownApps.ForPatterns(e.WindowPatterns) is { } app) triggers.Add(app.Id);
             foreach (var p in e.WindowPatterns)
                 if (p.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && !p.Contains('*')) triggers.Add(p.Trim().ToLowerInvariant());

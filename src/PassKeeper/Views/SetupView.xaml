@@ -42,6 +42,9 @@
                     </StackPanel>
                 </Button>
 
+                <Button x:Name="SignInLink" Style="{StaticResource Btn.Link}" HorizontalAlignment="Center" Margin="0,14,0,0"
+                        Content="{l:T Setup.SignIn}" Click="SignIn_Click" Visibility="Collapsed" />
+
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,18,0,0">
                     <TextBlock Style="{StaticResource Icon}" Text="&#xE72E;" FontSize="12" Foreground="{DynamicResource Brush.TextMuted}" Margin="0,0,6,0" />
                     <TextBlock Style="{StaticResource Text.Muted}" Text="{l:T Common.OfflineNote}" />

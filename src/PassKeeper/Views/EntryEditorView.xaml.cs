@@ -242,6 +242,9 @@ public partial class EntryEditorView : UserControl
         if (PinBox.Value.Length == 0 && source.StoredPin().Length > 0) PinBox.Value = source.StoredPin();
     }
 
+    /// <summary>Puts the cursor into the site address (a copy made for a website).</summary>
+    public void FocusAddress() => Dispatcher.BeginInvoke(() => UrlBox.Focus(), System.Windows.Threading.DispatcherPriority.Input);
+
     // ------------------------------------------------------------------ auto-type details
 
     private void AdvancedToggle_Click(object sender, RoutedEventArgs e) => SetAdvanced(AdvancedPanel.Visibility != Visibility.Visible);

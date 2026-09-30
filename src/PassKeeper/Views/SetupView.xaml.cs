@@ -21,7 +21,10 @@ public partial class SetupView : UserControl
         Master.EnterPressed += (_, _) => Confirm.FocusInput();
         Confirm.EnterPressed += (_, _) => Create_Click(this, new RoutedEventArgs());
         Loaded += (_, _) => Master.FocusInput();
+        SignInLink.Visibility = App.Instance.Profiles.List().Count > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
+
+    private void SignIn_Click(object sender, RoutedEventArgs e) => App.Instance.Main.Navigate(new LoginView());
 
     private void Lang_Checked(object sender, RoutedEventArgs e)
     {
@@ -40,12 +43,14 @@ public partial class SetupView : UserControl
         if (name.Length == 0) error = Loc.T("Setup.ErrName");
         else if (master.Length < VaultService.MinMasterPasswordLength) error = Loc.F("Setup.ErrShort", VaultService.MinMasterPasswordLength);
         else if (master != Confirm.Value) error = Loc.T("Setup.ErrMismatch");
+        else if (App.Instance.Profiles.FindByName(name) != null) error = Loc.T("Setup.ErrExists");
         ShowError(error);
         if (error != null) return;
 
         SetBusy(true);
         try
         {
+            App.Instance.PrepareNewProfile();
             var vault = App.Instance.Vault;
             await Task.Run(() => vault.Create(name, master));
             if (Autostart.Visibility == Visibility.Visible)

@@ -18,6 +18,8 @@ public sealed class HelpDialog : DialogBase
     private readonly FlowDocumentScrollViewer _viewer = new() { IsToolBarVisible = false, Focusable = true, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
     private readonly ListBox _toc = new();
     private readonly Dictionary<string, Block> _anchors = new(StringComparer.OrdinalIgnoreCase);
+    private ScrollViewer? _scroll;
+    private bool _syncingToc;
 
     private HelpDialog(string? anchor)
     {
@@ -42,7 +44,7 @@ public sealed class HelpDialog : DialogBase
         _toc.Margin = new Thickness(6, 0, 0, 16);
         _toc.SelectionChanged += (_, _) =>
         {
-            if (_toc.SelectedItem is ListBoxItem { Tag: string id }) ScrollTo(id);
+            if (!_syncingToc && _toc.SelectedItem is ListBoxItem { Tag: string id }) ScrollTo(id);
         };
         body.Children.Add(_toc);
 
@@ -62,7 +64,13 @@ public sealed class HelpDialog : DialogBase
         InitialFocus = _viewer;
         Loaded += (_, _) =>
         {
-            if (anchor != null) Dispatcher.BeginInvoke(() => ScrollTo(anchor), System.Windows.Threading.DispatcherPriority.Loaded);
+            _scroll = FindScrollViewer(_viewer);
+            if (_scroll != null) _scroll.ScrollChanged += (_, _) => SyncToc();
+            Dispatcher.BeginInvoke(() =>
+            {
+                if (anchor != null) ScrollTo(anchor);
+                SyncToc();
+            }, System.Windows.Threading.DispatcherPriority.Loaded);
         };
     }
 
@@ -81,7 +89,49 @@ public sealed class HelpDialog : DialogBase
 
     private void ScrollTo(string id)
     {
-        if (_anchors.TryGetValue(id, out var block)) block.BringIntoView();
+        if (!_anchors.TryGetValue(id, out var block)) return;
+        if (_scroll != null && Top(block) is { } top) _scroll.ScrollToVerticalOffset(Math.Max(0, top - 4));
+        else block.BringIntoView();
+    }
+
+    /// <summary>Position of a block in document coordinates (the scroll offset is in the same space).</summary>
+    private static double? Top(Block block)
+    {
+        var rect = block.ContentStart.GetCharacterRect(LogicalDirection.Forward);
+        return rect.IsEmpty ? null : rect.Top;
+    }
+
+    /// <summary>Highlights the section being read in the table of contents while the text scrolls.</summary>
+    private void SyncToc()
+    {
+        if (_scroll == null) return;
+        ListBoxItem? current = null;
+        foreach (ListBoxItem item in _toc.Items)
+        {
+            if (item.Tag is not string id || !_anchors.TryGetValue(id, out var block) || Top(block) is not { } top) continue;
+            if (top <= _scroll.VerticalOffset + 60) current = item;
+            else break;
+        }
+        // At the very end the last sections may never reach the top: the bottom of the text selects the last one.
+        if (_scroll.ScrollableHeight > 0 && _scroll.VerticalOffset >= _scroll.ScrollableHeight - 1 && _toc.Items.Count > 0)
+            current = (ListBoxItem)_toc.Items[^1];
+        current ??= _toc.Items.Count > 0 ? (ListBoxItem)_toc.Items[0] : null;
+        if (current == null || ReferenceEquals(_toc.SelectedItem, current)) return;
+        _syncingToc = true;
+        _toc.SelectedItem = current;
+        _toc.ScrollIntoView(current);
+        _syncingToc = false;
+    }
+
+    private static ScrollViewer? FindScrollViewer(DependencyObject root)
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is ScrollViewer sv) return sv;
+            if (FindScrollViewer(child) is { } found) return found;
+        }
+        return null;
     }
 
     // ------------------------------------------------------------------ markdown subset → FlowDocument

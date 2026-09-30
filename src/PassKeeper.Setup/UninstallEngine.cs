@@ -108,6 +108,7 @@ namespace PassKeeper.Setup
 
             progress(0.8, Texts.T(o.RemoveData ? "UnStepData" : "UnStepFiles"));
             TryDeleteValue(Registry.CurrentUser, InstallLayout.RunKeyPath, InstallLayout.RunValueName);
+            TryDeleteValue(Registry.CurrentUser, StartupApprovedPath, InstallLayout.RunValueName);
             TryDeleteKey(Registry.CurrentUser, InstallLayout.AppKeyPath);
             if (o.RemoveData) dataError = DeleteUserData();
             progress(1, Texts.T("StepDone"));
@@ -131,8 +132,13 @@ namespace PassKeeper.Setup
             }
         }
 
+        /// <summary>Enabled/disabled state of autostart entries kept by Task Manager ("Startup apps").</summary>
+        private const string StartupApprovedPath = @"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
+
         private static void RemoveProgram(bool machine, int parentPid)
         {
+            // Copies of other users are ended by the elevated uninstaller of an all-users installation.
+            RunningCopies.Close(InstallDirectory, 3000);
             TryDeleteFile(InstallLayout.LegacyStartMenuShortcut(machine));
             TryDeleteDirectory(InstallLayout.StartMenuFolder(machine));
             TryDeleteFile(InstallLayout.DesktopShortcut(machine));
@@ -141,6 +147,7 @@ namespace PassKeeper.Setup
                 TryDeleteKey(root, InstallLayout.UninstallKeyPath);
                 TryDeleteKey(root, InstallLayout.AppKeyPath);
                 TryDeleteValue(root, InstallLayout.RunKeyPath, InstallLayout.RunValueName);
+                TryDeleteValue(root, StartupApprovedPath, InstallLayout.RunValueName);
             }
             ScheduleFolderRemoval(InstallDirectory, parentPid);
         }
@@ -165,7 +172,10 @@ namespace PassKeeper.Setup
             }
         }
 
-        /// <summary>A running executable cannot delete itself: a hidden cmd script waits for the uninstaller to exit.</summary>
+        /// <summary>
+        /// A running executable cannot delete itself: a hidden cmd script waits for the uninstaller to exit and removes
+        /// the folder, retrying for a while if a file is still busy (antivirus scan, a closing copy).
+        /// </summary>
         private static void ScheduleFolderRemoval(string dir, int parentPid)
         {
             var manifest = Path.Combine(dir, InstallLayout.ManifestFileName);
@@ -180,18 +190,29 @@ namespace PassKeeper.Setup
             script.AppendLine(":wait");
             foreach (var p in new[] { pid, parentPid }.Where(p => p > 0))
                 script.AppendLine("tasklist /FI \"PID eq " + p + "\" 2>nul | find \" " + p + " \" >nul && (ping -n 2 127.0.0.1 >nul & goto wait)");
+            script.AppendLine("set tries=0");
+            script.AppendLine(":remove");
+            string check;
             if (name.Equals(InstallLayout.AppName, StringComparison.OrdinalIgnoreCase))
             {
-                script.AppendLine("rmdir /s /q \"" + name + "\"");
+                script.AppendLine("rmdir /s /q \"" + name + "\" 2>nul");
+                check = name;
             }
             else
             {
                 // Custom folder chosen by the user: remove only what the installer put there.
                 foreach (var rel in File.ReadAllLines(manifest).Where(l => l.Length > 0 && !l.Contains("..")))
-                    script.AppendLine("del /f /q \"" + Path.Combine(dir, rel) + "\"");
-                script.AppendLine("del /f /q \"" + manifest + "\"");
-                script.AppendLine("rmdir \"" + dir + "\"");
+                    script.AppendLine("del /f /q \"" + Path.Combine(dir, rel) + "\" 2>nul");
+                script.AppendLine("del /f /q \"" + manifest + "\" 2>nul");
+                script.AppendLine("rmdir \"" + dir + "\" 2>nul");
+                check = manifest;
             }
+            script.AppendLine("if not exist \"" + check + "\" goto done");
+            script.AppendLine("set /a tries+=1");
+            script.AppendLine("if %tries% geq 30 goto done");
+            script.AppendLine("ping -n 2 127.0.0.1 >nul");
+            script.AppendLine("goto remove");
+            script.AppendLine(":done");
             script.AppendLine("del \"%~f0\"");
             var path = Path.Combine(Path.GetTempPath(), "passkeeper-uninstall-" + pid + ".cmd");
             File.WriteAllText(path, script.ToString(), new UTF8Encoding(false));

@@ -27,6 +27,7 @@ public partial class UnlockView : UserControl
             Panel.Margin = new Thickness(0);
             Panel.Width = 320;
             Footer.Visibility = Visibility.Collapsed;
+            SignOut.Visibility = Visibility.Collapsed;
         }
         DataObject.AddPastingHandler(Pin, PinSetupView.OnPaste);
         Master.EnterPressed += (_, _) => Unlock_Click(this, new RoutedEventArgs());
@@ -42,6 +43,8 @@ public partial class UnlockView : UserControl
     private void OnLanguageChanged(object? sender, EventArgs e) => UpdateTexts();
 
     public event Action? Unlocked;
+
+    private async void SignOut_Click(object sender, RoutedEventArgs e) => await ProfileActions.SignOutAsync();
 
     public void FocusInput()
     {

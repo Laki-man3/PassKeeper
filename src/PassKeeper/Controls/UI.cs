@@ -43,6 +43,33 @@ public static class UI
     public static string? GetDescription(DependencyObject o) => (string?)o.GetValue(DescriptionProperty);
     public static void SetDescription(DependencyObject o, string? v) => o.SetValue(DescriptionProperty, v);
 
+    /// <summary>
+    /// Rotates the element while it is visible. A storyboard started by a trigger would keep ticking at the display
+    /// frame rate after the element is hidden or removed — a constant load in the background.
+    /// </summary>
+    public static readonly DependencyProperty SpinProperty = DependencyProperty.RegisterAttached(
+        "Spin", typeof(bool), typeof(UI), new FrameworkPropertyMetadata(false, OnSpinChanged));
+    public static bool GetSpin(DependencyObject o) => (bool)o.GetValue(SpinProperty);
+    public static void SetSpin(DependencyObject o, bool v) => o.SetValue(SpinProperty, v);
+
+    private static void OnSpinChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is not FrameworkElement element || e.NewValue is not true) return;
+        element.RenderTransformOrigin = new Point(0.5, 0.5);
+        var rotate = new RotateTransform();
+        element.RenderTransform = rotate;
+        void Update()
+        {
+            if (element.IsVisible && element.IsLoaded)
+                rotate.BeginAnimation(RotateTransform.AngleProperty,
+                    new System.Windows.Media.Animation.DoubleAnimation(0, 360, TimeSpan.FromSeconds(0.9)) { RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever });
+            else rotate.BeginAnimation(RotateTransform.AngleProperty, null);
+        }
+        element.IsVisibleChanged += (_, _) => Update();
+        element.Loaded += (_, _) => Update();
+        element.Unloaded += (_, _) => rotate.BeginAnimation(RotateTransform.AngleProperty, null);
+    }
+
     private static void OnPlaceholderChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is PasswordBox pb)

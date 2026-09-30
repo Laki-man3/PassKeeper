@@ -37,6 +37,7 @@
             </Button>
 
             <Button x:Name="SwitchMode" Style="{StaticResource Btn.Link}" HorizontalAlignment="Center" Margin="0,18,0,0" Click="SwitchMode_Click" />
+            <Button x:Name="SignOut" Style="{StaticResource Btn.Link}" HorizontalAlignment="Center" Margin="0,4,0,0" Content="{l:T Profile.SignOut}" Click="SignOut_Click" />
 
             <StackPanel x:Name="Footer" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,28,0,0">
                 <TextBlock Style="{StaticResource Icon}" Text="&#xE72E;" FontSize="12" Foreground="{DynamicResource Brush.TextMuted}" Margin="0,0,6,0" />

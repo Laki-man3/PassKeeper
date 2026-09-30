@@ -72,10 +72,10 @@
         </DataTemplate>
     </UserControl.Resources>
 
-    <Grid>
+    <Grid x:Name="Columns">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="252" />
-            <ColumnDefinition Width="340" />
+            <ColumnDefinition x:Name="SidebarColumn" Width="252" MinWidth="200" MaxWidth="420" />
+            <ColumnDefinition x:Name="ListColumn" Width="340" MinWidth="260" MaxWidth="760" />
             <ColumnDefinition Width="*" MinWidth="320" />
         </Grid.ColumnDefinitions>
 
@@ -109,10 +109,12 @@
                             </Border.Background>
                             <TextBlock x:Name="UserInitial" Foreground="White" FontWeight="SemiBold" FontSize="13" HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
-                        <StackPanel Grid.Column="1" Margin="10,0,4,0" VerticalAlignment="Center">
-                            <TextBlock x:Name="UserNameText" FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                            <TextBlock Style="{StaticResource Text.Muted}" FontSize="11" Text="{l:T Vault.LocalProfile}" />
-                        </StackPanel>
+                        <Button x:Name="UserButton" Grid.Column="1" Style="{StaticResource Btn.Row}" Padding="6,4" Margin="4,0,2,0" Click="User_Click" ToolTip="{l:T Profile.MenuTip}">
+                            <StackPanel>
+                                <TextBlock x:Name="UserNameText" FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Style="{StaticResource Text.Muted}" FontSize="11" Text="{l:T Vault.LocalProfile}" />
+                            </StackPanel>
+                        </Button>
                         <Button Grid.Column="2" Style="{StaticResource Btn.Icon}" Content="&#xE72E;" ToolTip="{l:T Vault.LockTip}" Click="Lock_Click" />
                     </Grid>
                 </StackPanel>
@@ -137,14 +139,17 @@
                             c:UI.Icon="&#xE710;" ToolTip="{l:T Vault.AddTip}" Click="Add_Click" />
                 </Grid>
                 <Grid DockPanel.Dock="Top" Margin="20,6,18,6">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock x:Name="ListTitle" Style="{StaticResource Text.H3}" VerticalAlignment="Center" />
-                        <Border Style="{StaticResource Badge}" Margin="8,0,0,0">
-                            <TextBlock x:Name="ListCount" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Brush.AccentText}" />
-                        </Border>
-                    </StackPanel>
-                    <Button x:Name="EmptyTrashButton" Style="{StaticResource Btn.Link}" HorizontalAlignment="Right" FontSize="12" Content="{l:T Vault.EmptyTrash}" Click="EmptyTrash_Click" Visibility="Collapsed" />
-                    <ComboBox x:Name="SortBox" HorizontalAlignment="Right" MinHeight="28" Height="28" FontSize="12" Width="150" SelectionChanged="Sort_SelectionChanged" />
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" MaxWidth="400" />
+                        <ColumnDefinition Width="*" MinWidth="38" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Name="ListTitle" Style="{StaticResource Text.H3}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                    <Border Grid.Column="1" Style="{StaticResource Badge}" Margin="8,0,10,0" HorizontalAlignment="Left">
+                        <TextBlock x:Name="ListCount" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Brush.AccentText}" />
+                    </Border>
+                    <Button x:Name="EmptyTrashButton" Grid.Column="2" Style="{StaticResource Btn.Link}" FontSize="12" Content="{l:T Vault.EmptyTrash}" Click="EmptyTrash_Click" Visibility="Collapsed" />
+                    <ComboBox x:Name="SortBox" Grid.Column="2" MinHeight="28" Height="28" FontSize="12" Width="140" SelectionChanged="Sort_SelectionChanged" />
                 </Grid>
                 <Grid>
                     <ListBox x:Name="EntryList" Style="{StaticResource List.Plain}" ItemContainerStyle="{StaticResource Item.Card}" Padding="0,0,0,12"
@@ -185,5 +190,9 @@
 
         <!-- ============================================================ details -->
         <ContentControl x:Name="DetailHost" Grid.Column="2" Focusable="False" IsTabStop="False" />
+
+        <!-- draggable borders between the panes (widths are remembered) -->
+        <GridSplitter Grid.Column="1" Style="{StaticResource PaneSplitter}" DragCompleted="Splitter_DragCompleted" />
+        <GridSplitter Grid.Column="2" Style="{StaticResource PaneSplitter}" DragCompleted="Splitter_DragCompleted" />
     </Grid>
 </UserControl>

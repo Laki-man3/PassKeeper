@@ -9,6 +9,8 @@ namespace PassKeeper.Services;
 public sealed class AppSettings
 {
     public string Language { get; set; } = "";
+    /// <summary>Folder id of the signed-in user (profiles\&lt;id&gt;); empty after "sign out".</summary>
+    public string ActiveProfile { get; set; } = "";
     /// <summary>"dark", "light" or "system".</summary>
     public string Theme { get; set; } = "dark";
     /// <summary>Inactivity period after which the PIN is required, in seconds.</summary>
@@ -20,6 +22,8 @@ public sealed class AppSettings
     public int ClipboardClearSeconds { get; set; } = 30;
     public string AutoTypeHotkey { get; set; } = "Ctrl+Alt+A";
     public bool SmartSuggestions { get; set; } = true;
+    /// <summary>Fill a site's login form by itself when exactly one entry matches the site.</summary>
+    public bool AutoFillWeb { get; set; } = true;
     /// <summary>Sign in automatically to clients whose entries have auto sign-in enabled.</summary>
     public bool AutoLogin { get; set; } = true;
     /// <summary>Known client ids / executable names that have auto sign-in entries (read while the vault is locked).</summary>
@@ -32,6 +36,9 @@ public sealed class AppSettings
     public string SortOrder { get; set; } = "name";
     public double WindowWidth { get; set; } = 1180;
     public double WindowHeight { get; set; } = 740;
+    /// <summary>Widths of the sidebar and the entry list (the borders between the panes can be dragged).</summary>
+    public double SidebarWidth { get; set; } = 252;
+    public double ListWidth { get; set; } = 340;
 
     public const int DefaultAutoLockSeconds = 8 * 3600;
     public const int MinAutoLockSeconds = 10;
