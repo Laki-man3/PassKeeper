@@ -12,9 +12,9 @@ Offline password manager for Windows. No network access, no cloud, no telemetry.
 
 | | | |
 |---|---|---|
-| ![Entry for a detected client](docs/screenshots/en/detected.png) | ![VPN entry](docs/screenshots/en/editor.png) | ![Auto-type: windows and sequence](docs/screenshots/en/autotype.png) |
-| ![Sign-in of a local user](docs/screenshots/en/login.png) | ![Autofill suggestion](docs/screenshots/en/autofill.png) | ![Settings: auto-lock dial](docs/screenshots/en/settings.png) |
-| ![Built-in help](docs/screenshots/en/help.png) | ![Installer](docs/screenshots/en/installer.png) | ![Uninstaller](docs/screenshots/en/uninstaller.png) |
+| ![Entry for a detected client](docs/screenshots/en/detected.png) | ![VPN entry](docs/screenshots/en/editor.png) | ![Sign-in of a local user](docs/screenshots/en/login.png) |
+| ![Choice of an account on a sign-in page](docs/screenshots/en/autofill.png) | ![Narrow window: panes and fields rearrange](docs/screenshots/en/narrow.png) | ![Settings: auto-lock dial](docs/screenshots/en/settings.png) |
+| ![About and feedback](docs/screenshots/en/about.png) | ![Built-in help](docs/screenshots/en/help.png) | ![Installer](docs/screenshots/en/installer.png) |
 
 ### Specifications
 
@@ -33,14 +33,14 @@ Offline password manager for Windows. No network access, no cloud, no telemetry.
 | Auto-lock | after 8 h of inactivity by default; any period from 10 s to 24 h, set to the second on a dial; optionally on Windows lock |
 | Clipboard | cleared after 30 s (10–60 s / never), excluded from clipboard history and cloud sync |
 | Backups | previous version + daily copies for 14 days (encrypted) |
-| Autofill | UI Automation / MSAA field detection, SendInput typing; websites filled automatically when the sign-in page opens (verified in Chrome 154, Firefox 156); desktop sign-in clients: VPN, VDI, RDP, token PIN prompts |
+| Autofill | UI Automation / MSAA field detection, SendInput typing; a sign-in page is found and filled when it opens, also without the cursor in the form (verified in Chrome 154, Firefox 156, Yandex Browser 26.8); desktop sign-in clients: VPN, VDI, RDP, token PIN prompts |
 | Automatic sign-in | when a client's sign-in window appears; at most 2 attempts per entry in 10 minutes |
 | Auto-type hotkey | Ctrl+Alt+A (configurable) |
 | Import | 25+ sources, see below |
 | Export | 13 formats |
 | UI languages | English, Russian |
 | Help | built-in user guide (works offline) |
-| Tests | 99 unit tests |
+| Tests | 104 unit tests |
 
 ### Features
 
@@ -48,11 +48,12 @@ Offline password manager for Windows. No network access, no cloud, no telemetry.
 - Entry fields: title, login, password, URLs, e-mail, phone, key/token, token PIN, TOTP, notes, folders, favorites, custom (hidden) fields, password history, trash.
 - Duplicate an entry, or copy a site's login and password into an entry for a VPN client or program. When a password changes, entries that still use the old one can be updated at once.
 - Users: first run creates a local user (name + master password), then a mandatory PIN; later starts and inactivity locks ask for the PIN only. Sign out deletes the PIN; signing in again takes the name and master password and a new PIN. Deleting a user in Settings erases that user's vault, PIN and backups. Data of earlier versions becomes the first user.
-- Websites: when a sign-in page opens and one entry matches the site, the login and password are filled in by themselves (once per page, fields the user has typed in are left alone). Several entries for the site: a list to choose from, the last used first. No entry: pick any entry, optionally remembering the site for it.
+- Websites: when a sign-in page opens, its form is found (the cursor is put into the login field with a click if needed, only when nothing covers it) and filled with the entry saved for that address, even when other entries share the domain (a company's other services). Several candidates: a list next to the login field; the chosen entry remembers the address and is filled in by itself next time. No entry: pick any entry and remember the site for it. Each page is filled once; fields the user has typed in are left alone.
 - Entries work both ways: a site's login and password can be copied into an entry for a VPN client or program, and any VPN or program entry can be used on a website ("Use for a website…").
-- Autofill in applications: a suggestion appears next to a focused login, password, e-mail, phone, one-time code, PIN or key field. The auto-type hotkey matches the active site or window and fills its fields one by one.
-- Resizable layout: the borders between sections, the entry list and the details can be dragged; widths are remembered.
-- Password generator, strength estimate, weak/reused password overview.
+- Autofill in applications: a suggestion appears next to a focused login, password, e-mail, phone, one-time code, PIN or key field; when one entry belongs to the window, an empty form is filled in by itself (without Enter). The auto-type hotkey matches the active site or window and fills its fields one by one.
+- Resizable layout: the borders between sections, the entry list and the details can be dragged; widths are remembered. In a small window the panes narrow and fields and buttons are placed one under another.
+- Dialogs (settings, help, generator) close with Esc or a click next to them.
+- Password generator with a strength estimate; overview of reused passwords.
 - Tray, autostart (no administrator rights), dark/light/system theme.
 
 ### Desktop sign-in clients
@@ -62,10 +63,10 @@ No manual window setup is needed:
 - **Detection.** Ctrl+Alt+A in the window of a client without an entry opens a new entry with the client, its windows and its form fields already recognised; the login and password can be taken from a site entry. After saving, PassKeeper signs in to that window.
 - **Client list.** "Choose…" in the editor finds running and installed clients (uninstall registry, running processes) and lists any other open window.
 - **Automatic sign-in.** For entries with "Sign in automatically", the fields are filled and Enter is pressed when the sign-in window appears; a locked vault asks for the PIN first. Each window is handled once, at most 2 attempts per entry in 10 minutes. Several accounts of one client are told apart by the server address in the window title.
-- Fields are filled one by one: a remembered login is kept or replaced, a password, PIN or code field gets only its value; a text box without a label before a password box is taken as the login.
+- Fields are filled one by one: a remembered login is kept or replaced, a password, PIN or code field gets only its value; a text box without a label in a known client's window is taken as the login.
 - Token / smart-card PIN: the entry's "Token PIN" field (otherwise the password); `{PIN}` in sequences.
 - Clients running as administrator or SYSTEM: Windows blocks simulated input (UIPI); the password or PIN goes to the clipboard (cleared as configured) with a notification.
-- Custom sequences (terminals, custom-drawn windows): placeholders are inserted by clicking, with ready-made examples.
+- Custom typing order (terminals, custom-drawn windows), folded at the bottom of the editor: placeholders are inserted by clicking, with ready-made examples. The client's window list is set by "Choose…" and can be edited by hand.
 
 | Group | Clients |
 |---|---|
@@ -89,7 +90,7 @@ Chrome 127+ protects newly saved passwords with App-Bound Encryption, which thir
 ### Installation
 
 ```bat
-PassKeeper-Setup-1.3.0.exe
+PassKeeper-Setup-1.4.0.exe
 ```
 
 | Mode | Location | Rights |
@@ -103,7 +104,7 @@ The autostart and language chosen in the installer are used on the first run.
 Silent install: `/S`, `/allusers` or `/currentuser`, `/desktop`, `/autostart` or `/noautostart`, `/nolaunch`, `"/dir=path"`, `/lang=en|ru`. Exit codes: 0 ok, 1 error, 740 elevation required, 1602 cancelled.
 
 ```bat
-PassKeeper-Setup-1.3.0.exe /S /allusers /desktop /autostart
+PassKeeper-Setup-1.4.0.exe /S /allusers /desktop /autostart
 ```
 
 ### Uninstall
@@ -148,9 +149,9 @@ Output in `dist\<version>\`: installer, portable zip, `SHA256SUMS.txt`, `7z\` vo
 
 | | | |
 |---|---|---|
-| ![Запись для обнаруженного клиента](docs/screenshots/ru/detected.png) | ![Запись VPN](docs/screenshots/ru/editor.png) | ![Автоввод: окна и последовательность](docs/screenshots/ru/autotype.png) |
-| ![Вход локального пользователя](docs/screenshots/ru/login.png) | ![Подсказка автозаполнения](docs/screenshots/ru/autofill.png) | ![Настройки: циферблат автоблокировки](docs/screenshots/ru/settings.png) |
-| ![Встроенная справка](docs/screenshots/ru/help.png) | ![Установщик](docs/screenshots/ru/installer.png) | ![Деинсталлятор](docs/screenshots/ru/uninstaller.png) |
+| ![Запись для обнаруженного клиента](docs/screenshots/ru/detected.png) | ![Запись VPN](docs/screenshots/ru/editor.png) | ![Вход локального пользователя](docs/screenshots/ru/login.png) |
+| ![Выбор учётной записи на странице входа](docs/screenshots/ru/autofill.png) | ![Узкое окно: панели и поля перестраиваются](docs/screenshots/ru/narrow.png) | ![Настройки: циферблат автоблокировки](docs/screenshots/ru/settings.png) |
+| ![О программе и обратная связь](docs/screenshots/ru/about.png) | ![Встроенная справка](docs/screenshots/ru/help.png) | ![Установщик](docs/screenshots/ru/installer.png) |
 
 ### Характеристики
 
@@ -169,14 +170,14 @@ Output in `dist\<version>\`: installer, portable zip, `SHA256SUMS.txt`, `7z\` vo
 | Автоблокировка | по умолчанию через 8 ч бездействия; любой срок от 10 с до 24 ч с точностью до секунды на циферблате; опционально при блокировке Windows |
 | Буфер обмена | очистка через 30 с (10–60 с / никогда), исключение из журнала и облачной синхронизации |
 | Резервные копии | предыдущая версия + ежедневные копии за 14 дней (зашифрованы) |
-| Автозаполнение | поиск полей через UI Automation / MSAA, ввод через SendInput; сайты заполняются сами при открытии страницы входа (проверено в Chrome 154, Firefox 156); клиенты входа: VPN, VDI, RDP, запросы PIN токенов |
+| Автозаполнение | поиск полей через UI Automation / MSAA, ввод через SendInput; страница входа находится и заполняется при открытии, даже если курсор не в форме (проверено в Chrome 154, Firefox 156, Яндекс Браузере 26.8); клиенты входа: VPN, VDI, RDP, запросы PIN токенов |
 | Автовход | при появлении окна входа клиента; не больше 2 попыток на запись за 10 минут |
 | Горячая клавиша автоввода | Ctrl+Alt+A (настраивается) |
 | Импорт | 25+ источников, см. ниже |
 | Экспорт | 13 форматов |
 | Языки интерфейса | русский, английский |
 | Справка | встроенное руководство (работает без сети) |
-| Тесты | 99 модульных тестов |
+| Тесты | 104 модульных теста |
 
 ### Возможности
 
@@ -184,11 +185,12 @@ Output in `dist\<version>\`: installer, portable zip, `SHA256SUMS.txt`, `7z\` vo
 - Поля записи: название, логин, пароль, адреса сайтов, e-mail, телефон, ключ/токен, PIN токена, TOTP, заметки, папки, избранное, дополнительные (скрытые) поля, история паролей, корзина.
 - Дублирование записи и копирование логина и пароля сайта в запись для VPN‑клиента или программы. При смене пароля записи со старым паролем можно обновить сразу.
 - Пользователи: при первом запуске создаётся локальный пользователь (имя + мастер-пароль), затем обязательный PIN; при следующих запусках и после автоблокировки запрашивается только PIN. Выход из пользователя удаляет PIN; при повторном входе нужны имя и мастер-пароль и новый PIN. Удаление пользователя в настройках стирает его хранилище, PIN и резервные копии. Данные прежних версий становятся первым пользователем.
-- Сайты: при открытии страницы входа, если сайту соответствует одна запись, логин и пароль подставляются сами (один раз на страницу, поля, в которые пользователь уже что-то ввёл, не трогаются). Несколько записей для сайта — список для выбора, последняя использованная сверху. Записи нет — можно выбрать любую и запомнить для неё этот сайт.
+- Сайты: при открытии страницы входа PassKeeper находит форму (если нужно, ставит курсор в поле логина щелчком — только когда поле ничем не закрыто) и подставляет запись, сохранённую для этого адреса, даже если у домена есть другие записи (другие сервисы компании). Несколько кандидатов — список у поля логина; выбранная запись запоминает адрес и в следующий раз подставится сама. Записи нет — можно выбрать любую и запомнить для неё сайт. Каждая страница заполняется один раз; поля, в которые пользователь уже что-то ввёл, не трогаются.
 - Записи работают в обе стороны: логин и пароль сайта копируются в запись VPN‑клиента или программы, а запись VPN или программы можно использовать на сайте («Использовать для сайта…»).
-- Автозаполнение в программах: подсказка появляется рядом с полем логина, пароля, e-mail, телефона, одноразового кода, PIN или ключа. Горячая клавиша подбирает запись по сайту или окну и заполняет поля по отдельности.
-- Размеры панелей: границы между разделами, списком записей и карточкой перетаскиваются мышью; ширина запоминается.
-- Генератор паролей, оценка стойкости, обзор слабых и повторяющихся паролей.
+- Автозаполнение в программах: подсказка появляется рядом с полем логина, пароля, e-mail, телефона, одноразового кода, PIN или ключа; если окну соответствует одна запись, пустая форма заполняется сама (без Enter). Горячая клавиша подбирает запись по сайту или окну и заполняет поля по отдельности.
+- Размеры панелей: границы между разделами, списком записей и карточкой перетаскиваются мышью; ширина запоминается. В небольшом окне панели сужаются, а поля и кнопки перестраиваются в столбик.
+- Диалоги (настройки, справка, генератор) закрываются по Esc или щелчку рядом с окном.
+- Генератор паролей с оценкой стойкости; обзор повторяющихся паролей.
 - Трей, автозапуск (без прав администратора), тёмная/светлая/системная тема.
 
 ### Клиенты входа (VPN, VDI, RDP)
@@ -198,10 +200,10 @@ Output in `dist\<version>\`: installer, portable zip, `SHA256SUMS.txt`, `7z\` vo
 - **Автоопределение.** Ctrl+Alt+A в окне клиента, для которого нет записи, открывает новую запись с уже определёнными клиентом, окнами и полями формы; логин и пароль можно взять из записи сайта. После сохранения PassKeeper выполняет вход в это окно.
 - **Список клиентов.** Кнопка «Выбрать…» в редакторе находит запущенные и установленные клиенты (по реестру программ и процессам) и показывает любые другие открытые окна.
 - **Автовход.** Для записей с включённым «Входить автоматически» при появлении окна входа поля заполняются и нажимается Enter; при заблокированном хранилище сначала запрашивается PIN. Каждое окно обрабатывается один раз, не больше 2 попыток на запись за 10 минут. Несколько учётных записей одного клиента различаются по адресу сервера в заголовке окна.
-- Поля заполняются по отдельности: запомненный логин сохраняется или заменяется, в поле пароля, PIN или кода вводится только это значение; текстовое поле без подписи перед полем пароля считается логином.
+- Поля заполняются по отдельности: запомненный логин сохраняется или заменяется, в поле пароля, PIN или кода вводится только это значение; текстовое поле без подписи в окне известного клиента считается логином.
 - PIN токена / смарт-карты: поле записи «PIN‑код токена» (если его нет — пароль); `{PIN}` в последовательностях.
 - Клиенты, запущенные от имени администратора или SYSTEM: Windows блокирует эмулированный ввод (UIPI); пароль или PIN передаётся через буфер обмена (с очисткой по настройке) и уведомлением.
-- Свои последовательности (терминалы, окна с собственной отрисовкой): подстановки вставляются нажатием, есть готовые варианты.
+- Свой порядок ввода (терминалы, окна с собственной отрисовкой) — свёрнутый блок внизу редактора: подстановки вставляются нажатием, есть готовые варианты. Список окон клиента задаёт кнопка «Выбрать…», при необходимости его можно изменить вручную.
 
 | Группа | Клиенты |
 |---|---|
@@ -225,7 +227,7 @@ Chrome 127+ шифрует новые пароли App-Bound Encryption, нед�
 ### Установка
 
 ```bat
-PassKeeper-Setup-1.3.0.exe
+PassKeeper-Setup-1.4.0.exe
 ```
 
 | Режим | Папка | Права |
@@ -239,7 +241,7 @@ PassKeeper-Setup-1.3.0.exe
 Тихая установка: `/S`, `/allusers` или `/currentuser`, `/desktop`, `/autostart` или `/noautostart`, `/nolaunch`, `"/dir=путь"`, `/lang=ru|en`. Коды возврата: 0 — успех, 1 — ошибка, 740 — нужны права администратора, 1602 — отменено.
 
 ```bat
-PassKeeper-Setup-1.3.0.exe /S /allusers /desktop /autostart
+PassKeeper-Setup-1.4.0.exe /S /allusers /desktop /autostart
 ```
 
 ### Удаление

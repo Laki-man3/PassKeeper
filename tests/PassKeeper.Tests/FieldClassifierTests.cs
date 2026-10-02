@@ -26,6 +26,9 @@ public class FieldClassifierTests
     [InlineData(true, "Passcode:", FieldKind.Otp)]
     [InlineData(true, "Second Password:", FieldKind.Otp)]
     [InlineData(true, "Spinner password", FieldKind.Password)]
+    [InlineData(false, "Username or email", FieldKind.Login)]
+    [InlineData(false, "Имя пользователя или E-mail", FieldKind.Login)]
+    [InlineData(true, "Пароль", FieldKind.Password)]
     public void Classifies(bool isPassword, string name, FieldKind expected) =>
         Assert.Equal(expected, FieldClassifier.Classify(isPassword, name));
 

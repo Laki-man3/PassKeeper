@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using PassKeeper.Core.AutoType;
 using PassKeeper.Core.Matching;
 using PassKeeper.Core.Models;
@@ -12,24 +11,12 @@ namespace PassKeeper.Services;
 /// login form, the fields are filled and Enter is pressed. Each window is handled once, and an entry is tried at most
 /// <see cref="MaxAttempts"/> times in <see cref="AttemptWindow"/>, so a wrong password cannot lock the account.
 /// </summary>
-public sealed class AutoLoginService : IDisposable
+public sealed class AutoLoginService
 {
     public const int MaxAttempts = 2;
     public static readonly TimeSpan AttemptWindow = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan FormWait = TimeSpan.FromSeconds(6);
 
-    private delegate void WinEventDelegate(IntPtr hook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint thread, uint time);
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr SetWinEventHook(uint eventMin, uint eventMax, IntPtr module, WinEventDelegate callback, uint processId, uint threadId, uint flags);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool UnhookWinEvent(IntPtr hook);
-
-    private const uint EventSystemForeground = 0x0003;
-    private const uint WinEventOutOfContext = 0x0000;
-    private const uint WinEventSkipOwnProcess = 0x0002;
     private const uint GaRoot = 2;
 
     private readonly App _app;
@@ -37,14 +24,17 @@ public sealed class AutoLoginService : IDisposable
     private readonly Dictionary<IntPtr, DateTime> _checked = [];
     private readonly HashSet<IntPtr> _unlockAsked = [];
     private readonly Dictionary<Guid, List<DateTime>> _attempts = [];
-    private WinEventDelegate? _callback;
-    private IntPtr _hook;
+    private bool _enabled;
     private IntPtr _busyWindow;
     private int _autoEntries;
 
-    public AutoLoginService(App app)
+    public AutoLoginService(App app, ForegroundWatcher foreground)
     {
         _app = app;
+        foreground.Changed += hwnd =>
+        {
+            if (_enabled) _ = TryWindowAsync(hwnd, null);
+        };
         // A window filled by the hotkey, a suggestion or after saving an entry is not signed in to again.
         app.AutoType.WindowFilled += hwnd =>
         {
@@ -53,28 +43,9 @@ public sealed class AutoLoginService : IDisposable
         };
     }
 
-    public void Start()
-    {
-        if (_hook != IntPtr.Zero) return;
-        _callback = OnForeground;
-        _hook = SetWinEventHook(EventSystemForeground, EventSystemForeground, IntPtr.Zero, _callback, 0, 0, WinEventOutOfContext | WinEventSkipOwnProcess);
-    }
+    public void Start() => _enabled = true;
 
-    public void Stop()
-    {
-        if (_hook == IntPtr.Zero) return;
-        UnhookWinEvent(_hook);
-        _hook = IntPtr.Zero;
-        _callback = null;
-    }
-
-    public void Dispose() => Stop();
-
-    private void OnForeground(IntPtr hook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint thread, uint time)
-    {
-        if (idObject != 0 || hwnd == IntPtr.Zero) return;
-        _app.Dispatcher.BeginInvoke(async () => await TryWindowAsync(hwnd, null));
-    }
+    public void Stop() => _enabled = false;
 
     /// <summary>
     /// Signs in to the window if an auto sign-in entry covers it. Returns true when the window is being or was
@@ -86,6 +57,7 @@ public sealed class AutoLoginService : IDisposable
         var root = Native.GetAncestor(hwnd, GaRoot);
         if (root != IntPtr.Zero) hwnd = root;
         if (_busyWindow == hwnd || _app.AutoType.IsTyping) return true;
+        if (_app.AutoType.IsBusy) return false; // the hotkey is being handled (an entry is being chosen)
         // Nothing to sign in to: return before looking at the window at all.
         if (_app.Vault.IsUnlocked ? _autoEntries == 0 : _app.Settings.AutoLoginTriggers.Count == 0) return false;
         if (_busyWindow != IntPtr.Zero) return false;
@@ -171,7 +143,8 @@ public sealed class AutoLoginService : IDisposable
     private void Expire()
     {
         var now = DateTime.UtcNow;
-        foreach (var hwnd in _done.Where(p => now - p.Value > TimeSpan.FromMinutes(30) || !Native.IsWindow(p.Key)).Select(p => p.Key).ToList()) _done.Remove(hwnd);
+        // A sign-in window that was closed or hidden counts as new when it comes back (clients reuse their dialogs).
+        foreach (var hwnd in _done.Where(p => now - p.Value > TimeSpan.FromMinutes(30) || !Native.IsWindowVisible(p.Key)).Select(p => p.Key).ToList()) _done.Remove(hwnd);
         foreach (var hwnd in _checked.Where(p => now - p.Value > TimeSpan.FromSeconds(20)).Select(p => p.Key).ToList()) _checked.Remove(hwnd);
         _unlockAsked.RemoveWhere(h => !Native.IsWindow(h));
     }

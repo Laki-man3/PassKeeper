@@ -20,7 +20,9 @@ public partial class App : Application
     private IdleMonitor? _idle;
     private FocusWatcher? _watcher;
     private AutoLoginService? _autoLogin;
-    private BrowserTitleWatcher? _pages;
+    private ForegroundWatcher? _foreground;
+    private BrowserPageWatcher? _pages;
+    private readonly Dictionary<string, DateTime> _pageScans = [];
     private SuggestionPopup? _popup;
 
     public App(StartupOptions options, SingleInstance? instance)
@@ -53,7 +55,7 @@ public partial class App : Application
         DispatcherUnhandledException += OnUnhandledException;
 
         DataDirectory = AppPaths.ResolveDataDirectory(_options.DataDirectory);
-        if (_options.ScreenshotsDirectory != null || _options.SelfTestReport != null)
+        if (_options.ScreenshotsDirectory != null)
         {
             DataDirectory = Path.Combine(Path.GetTempPath(), "PassKeeper-screens-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(DataDirectory);
@@ -82,11 +84,6 @@ public partial class App : Application
             DevScreens.Run(_options.ScreenshotsDirectory, _options.ScreenshotsLanguage);
             return;
         }
-        if (_options.SelfTestReport != null)
-        {
-            DevSelfTest.Run(_options.SelfTestReport, _options.SelfTestBrowser);
-            return;
-        }
 
         Tray = new TrayService();
         Tray.OpenRequested += ShowMainWindow;
@@ -107,16 +104,25 @@ public partial class App : Application
 
         _watcher = new FocusWatcher();
         _watcher.LoginFieldFocused += OnLoginFieldFocused;
+        _watcher.PageShown += OnPageShown;
         _watcher.FocusLeft += () => Dispatcher.BeginInvoke(() =>
         {
             if (_popup is { IsMouseOver: false }) _popup.HidePopup();
         });
-        _pages = new BrowserTitleWatcher();
-        _pages.PageChanged += () => _watcher?.ProbeNow();
-        _watcher.BrowserSeen += pid => Dispatcher.BeginInvoke(() => _pages?.Watch(pid));
         if (Settings.SmartSuggestions) _watcher.Start();
 
-        _autoLogin = new AutoLoginService(this);
+        // Switching to another window takes the suggestion card away, even with the mouse over it.
+        _foreground = new ForegroundWatcher();
+        _foreground.Changed += hwnd =>
+        {
+            if (_popup is { IsVisible: true } && !_popup.IsFor(hwnd)) _popup.HidePopup();
+        };
+        _pages = new BrowserPageWatcher(_foreground);
+        _pages.PageChanged += () =>
+        {
+            if (Settings.SmartSuggestions && Settings.AutoFillWeb) _watcher?.ProbePage();
+        };
+        _autoLogin = new AutoLoginService(this, _foreground);
         if (Settings.AutoLogin) _autoLogin.Start();
 
         SystemEvents.SessionSwitch += OnSessionSwitch;
@@ -336,8 +342,7 @@ public partial class App : Application
         {
             SaveWindowSize();
             _watcher?.Dispose();
-            _pages?.Dispose();
-            _autoLogin?.Dispose();
+            _foreground?.Dispose();
             Hotkeys?.Dispose();
             _idle?.Dispose();
             Tray?.Dispose();
@@ -385,6 +390,7 @@ public partial class App : Application
     {
         if (!Settings.SmartSuggestions || IsExiting) return;
         var target = TargetDetector.Capture(field.Window, detectUrl: true, focused: field.Element);
+        var hasValue = !string.IsNullOrEmpty(FieldFinder.GetValue(field.Element));
         Dispatcher.BeginInvoke(async () =>
         {
             if (!HasProfile || IsExiting) return;
@@ -394,22 +400,35 @@ public partial class App : Application
                 return;
             }
             _popup ??= CreatePopup();
+            // PassKeeper itself is filling this form: the cursor moving on needs no card.
+            if (AutoType.IsTyping || AutoType.IsAutoFilling(field.Window))
+            {
+                _popup.HidePopup();
+                return;
+            }
             if (!Vault.IsUnlocked)
             {
                 if (field.Kind is FieldKind.Password or FieldKind.Otp or FieldKind.Pin) _popup.ShowLocked(field, target);
                 return;
             }
             var all = EntryMatcher.Match(Vault.ActiveEntries, target.ToContext());
-            var matches = all.Select(m => m.Entry).Where(e => AutoTypeService.CanFill(e, field.Kind)).ToList();
-            if (matches.Count == 1 && target.IsBrowser && Settings.AutoFillWeb &&
-                await AutoType.TryAutoFillWebAsync(matches[0], field, target))
+            var matches = all.Where(m => AutoTypeService.CanFill(m.Entry, field.Kind)).ToList();
+            if (Settings.AutoFillWeb && EntryMatcher.Obvious(matches, target.IsBrowser) is { } entry &&
+                await AutoType.TryAutoFillAsync(entry, field, target))
+            {
+                _popup.HidePopup();
+                return;
+            }
+            // The form was filled a moment ago and the cursor went on to its next field, or the window is already gone
+            // (a client closes its sign-in window after signing in).
+            if (AutoType.JustFilled(field) && (hasValue || field.IsPassword) || !Native.IsWindow(field.Window) || target.ProcessName.Length == 0)
             {
                 _popup.HidePopup();
                 return;
             }
             if (matches.Count > 0)
             {
-                // Several accounts for one site: the user chooses (the one used last is on top).
+                // Several accounts: the user chooses (the one used last is on top).
                 _popup.ShowEntries(field, target, matches);
                 return;
             }
@@ -432,10 +451,60 @@ public partial class App : Application
         });
     }
 
+    /// <summary>
+    /// A browser page is in front and the cursor is in none of its fields. If the site has entries, its sign-in form is
+    /// looked for: with one obvious entry the cursor is put into the login field and the form filled, with several the
+    /// list is shown next to the login field. Pages of sites without entries are not examined.
+    /// </summary>
+    private void OnPageShown(BrowserPage page)
+    {
+        if (!Settings.SmartSuggestions || !Settings.AutoFillWeb || IsExiting) return;
+        var target = TargetDetector.Capture(page.Window, detectUrl: true, focused: page.Document);
+        if (DomainUtil.GetHost(target.Url) == null) return;
+        Dispatcher.BeginInvoke(async () =>
+        {
+            if (!HasProfile || !Vault.IsUnlocked || IsExiting || AutoType.IsBusy) return;
+            var matches = EntryMatcher.Match(Vault.ActiveEntries, target.ToContext())
+                .Where(m => AutoTypeService.CanFill(m.Entry, FieldKind.Login))
+                .ToList();
+            if (matches.Count == 0) return;
+            // A page already examined a moment ago (its title changes, the user comes back to it) is left as it is.
+            var key = page.Window + "|" + target.Url;
+            foreach (var old in _pageScans.Where(p => DateTime.UtcNow - p.Value > TimeSpan.FromSeconds(15)).Select(p => p.Key).ToList()) _pageScans.Remove(old);
+            if (!_pageScans.TryAdd(key, DateTime.UtcNow)) return;
+            LoginField? field = null;
+            // The form may still be appearing: a few looks over two seconds.
+            for (var attempt = 0; attempt < 3 && field == null; attempt++)
+            {
+                if (attempt > 0) await Task.Delay(700);
+                if (_watcher?.IsCurrent(page.Sequence) != true) return;
+                field = await Task.Run(() => FieldFinder.FindSignInField(page.Document, page.Window));
+            }
+            if (field == null || _watcher?.IsCurrent(page.Sequence) != true) return;
+            _popup ??= CreatePopup();
+            if (EntryMatcher.Obvious(matches, site: true) is { } entry &&
+                await AutoType.TryAutoFillAsync(entry, field, target, putCursor: true))
+            {
+                _popup.HidePopup();
+                return;
+            }
+            if (_watcher?.IsCurrent(page.Sequence) == true) _popup.ShowEntries(field, target, matches);
+        });
+    }
+
     private SuggestionPopup CreatePopup()
     {
         var popup = new SuggestionPopup();
-        popup.EntryChosen += async (entry, field) => await AutoType.FillFieldAsync(entry, field);
+        popup.EntryChosen += async (entry, field, target, exact) =>
+        {
+            // The card may belong to a page the user has left, or to a form found on the page with the cursor
+            // elsewhere: nothing is typed unless the cursor is (or could be put) in that very field.
+            if (!await Task.Run(() => AutoTypeService.PutCursorInto(field))) return;
+            // An entry chosen for another address of its domain (single sign-on page) is filled there by itself next time.
+            if (target is { IsBrowser: true } && !exact) entry = AutoType.Associate(entry, target);
+            AutoType.MarkFilled(field.Window, target);
+            await AutoType.FillFieldAsync(entry, field);
+        };
         popup.UnlockRequested += async field =>
         {
             if (await QuickUnlockWindow.ShowAsync(null)) Native.ForceForeground(field.Window);
@@ -447,6 +516,7 @@ public partial class App : Application
             if (entry == null) return;
             if (remember) entry = AutoType.Associate(entry, target);
             await Task.Delay(150);
+            AutoType.MarkFilled(field.Window, target);
             await AutoType.FillFieldAsync(entry, field);
         };
         popup.CreateRequested += async field =>

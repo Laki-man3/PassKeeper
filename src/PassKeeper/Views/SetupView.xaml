@@ -15,7 +15,6 @@
 
                 <TextBlock Style="{StaticResource Text.Label}" Margin="0,16,0,6" Text="{l:T Setup.Master}" />
                 <c:SecretBox x:Name="Master" Placeholder="{l:T Setup.MasterPlaceholder}" />
-                <c:StrengthMeter Margin="0,8,0,0" Password="{Binding Value, ElementName=Master}" />
 
                 <TextBlock Style="{StaticResource Text.Label}" Margin="0,14,0,6" Text="{l:T Setup.Confirm}" />
                 <c:SecretBox x:Name="Confirm" Placeholder="{l:T Setup.ConfirmPlaceholder}" />

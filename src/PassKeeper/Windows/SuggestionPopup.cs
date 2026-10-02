@@ -8,6 +8,7 @@ using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using PassKeeper.Controls;
 using PassKeeper.Core.AutoType;
+using PassKeeper.Core.Matching;
 using PassKeeper.Core.Models;
 using PassKeeper.Localization;
 using PassKeeper.Services;
@@ -25,6 +26,8 @@ public sealed class SuggestionPopup : Window
     private readonly TextBlock _footer = new() { FontSize = 11, Margin = new Thickness(14, 6, 14, 10), TextWrapping = TextWrapping.Wrap };
     private readonly DispatcherTimer _autoHide = new() { Interval = TimeSpan.FromSeconds(20) };
     private LoginField? _field;
+    private TargetWindow? _target;
+    private HashSet<Guid> _exact = [];
 
     public SuggestionPopup()
     {
@@ -79,17 +82,21 @@ public sealed class SuggestionPopup : Window
         };
     }
 
-    public event Action<VaultEntry, LoginField>? EntryChosen;
+    /// <summary>An entry was clicked: the entry, its field, the site or window, and whether it was saved for exactly this address.</summary>
+    public event Action<VaultEntry, LoginField, TargetWindow?, bool>? EntryChosen;
     public event Action<LoginField>? UnlockRequested;
     public event Action<LoginField>? CreateRequested;
     public event Action<LoginField, TargetWindow>? ChooseRequested;
 
-    public bool IsShowingFor(LoginField field) => IsVisible && _field != null && _field.Window == field.Window;
+    /// <summary>The card belongs to a field of this window.</summary>
+    public bool IsFor(IntPtr window) => _field != null && _field.Window == window;
 
-    public void ShowEntries(LoginField field, TargetWindow target, IReadOnlyList<VaultEntry> entries)
+    public void ShowEntries(LoginField field, TargetWindow target, IReadOnlyList<EntryMatch> matches)
     {
         _field = field;
-        Fill(entries, target.Describe(), field.Kind);
+        _target = target;
+        _exact = matches.Where(m => m.Score >= 100).Select(m => m.Entry.Id).ToHashSet();
+        Fill(matches.Select(m => m.Entry).ToList(), target.Describe(), field.Kind);
         Present(field.Bounds);
     }
 
@@ -185,6 +192,7 @@ public sealed class SuggestionPopup : Window
     {
         _autoHide.Stop();
         _field = null;
+        _target = null;
         if (IsVisible) Hide();
     }
 
@@ -229,8 +237,10 @@ public sealed class SuggestionPopup : Window
         button.Click += (_, _) =>
         {
             var f = _field;
+            var target = _target;
+            var exact = _exact.Contains(entry.Id);
             HidePopup();
-            if (f != null) EntryChosen?.Invoke(entry, f);
+            if (f != null) EntryChosen?.Invoke(entry, f, target, exact);
         };
         return button;
     }

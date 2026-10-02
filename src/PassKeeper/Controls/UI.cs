@@ -70,6 +70,114 @@ public static class UI
         element.Unloaded += (_, _) => rotate.BeginAnimation(RotateTransform.AngleProperty, null);
     }
 
+    /// <summary>
+    /// For a grid of two fields side by side (columns: field, gap, field): below this width the second field moves
+    /// under the first and both take the whole width, so nothing is squeezed when a pane is made narrow.
+    /// </summary>
+    public static readonly DependencyProperty StackBelowProperty = DependencyProperty.RegisterAttached(
+        "StackBelow", typeof(double), typeof(UI), new FrameworkPropertyMetadata(0.0, OnStackBelowChanged));
+    public static double GetStackBelow(DependencyObject o) => (double)o.GetValue(StackBelowProperty);
+    public static void SetStackBelow(DependencyObject o, double v) => o.SetValue(StackBelowProperty, v);
+
+    private static readonly DependencyProperty StackedProperty = DependencyProperty.RegisterAttached(
+        "Stacked", typeof(bool?), typeof(UI), new FrameworkPropertyMetadata(null));
+
+    private static void OnStackBelowChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        // Set from XAML before the columns are added: they are checked when the grid gets its size.
+        if (d is not Grid grid) return;
+        grid.SizeChanged -= StackGrid;
+        grid.SizeChanged += StackGrid;
+    }
+
+    private static void StackGrid(object sender, SizeChangedEventArgs e)
+    {
+        var grid = (Grid)sender;
+        if (grid.ColumnDefinitions.Count != 3) return;
+        var stacked = grid.ActualWidth < GetStackBelow(grid);
+        if (grid.GetValue(StackedProperty) is bool current && current == stacked) return;
+        grid.SetValue(StackedProperty, stacked);
+        if (grid.RowDefinitions.Count == 0)
+        {
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        }
+        grid.ColumnDefinitions[1].Width = new GridLength(stacked ? 0 : 14);
+        grid.ColumnDefinitions[2].Width = stacked ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
+        foreach (UIElement child in grid.Children)
+        {
+            if (child is not FrameworkElement element) continue;
+            var second = Grid.GetColumn(element) == 2 || Grid.GetRow(element) == 1;
+            if (second)
+            {
+                Grid.SetColumn(element, stacked ? 0 : 2);
+                Grid.SetRow(element, stacked ? 1 : 0);
+                Grid.SetColumnSpan(element, stacked ? 3 : 1);
+                element.Margin = new Thickness(element.Margin.Left, stacked ? 14 : 0, element.Margin.Right, element.Margin.Bottom);
+            }
+            else Grid.SetColumnSpan(element, stacked ? 3 : 1);
+        }
+    }
+
+    /// <summary>
+    /// For a row of "icon or picture, text, buttons" (columns Auto, *, Auto): below this width the buttons go under
+    /// the text instead of squeezing it.
+    /// </summary>
+    public static readonly DependencyProperty WrapLastBelowProperty = DependencyProperty.RegisterAttached(
+        "WrapLastBelow", typeof(double), typeof(UI), new FrameworkPropertyMetadata(0.0, OnWrapLastBelowChanged));
+    public static double GetWrapLastBelow(DependencyObject o) => (double)o.GetValue(WrapLastBelowProperty);
+    public static void SetWrapLastBelow(DependencyObject o, double v) => o.SetValue(WrapLastBelowProperty, v);
+
+    /// <summary>The wrapped buttons start under the first column (the picture) rather than under the text.</summary>
+    public static readonly DependencyProperty WrapFromStartProperty = DependencyProperty.RegisterAttached(
+        "WrapFromStart", typeof(bool), typeof(UI), new FrameworkPropertyMetadata(false));
+    public static bool GetWrapFromStart(DependencyObject o) => (bool)o.GetValue(WrapFromStartProperty);
+    public static void SetWrapFromStart(DependencyObject o, bool v) => o.SetValue(WrapFromStartProperty, v);
+
+    private static readonly DependencyProperty WrappedProperty = DependencyProperty.RegisterAttached(
+        "Wrapped", typeof(bool?), typeof(UI), new FrameworkPropertyMetadata(null));
+
+    private static readonly DependencyProperty OriginalLayoutProperty = DependencyProperty.RegisterAttached(
+        "OriginalLayout", typeof(Tuple<Thickness, HorizontalAlignment>), typeof(UI), new FrameworkPropertyMetadata(null));
+
+    private static void OnWrapLastBelowChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is not Grid grid) return;
+        grid.SizeChanged -= WrapLast;
+        grid.SizeChanged += WrapLast;
+    }
+
+    private static void WrapLast(object sender, SizeChangedEventArgs e)
+    {
+        var grid = (Grid)sender;
+        var last = grid.ColumnDefinitions.Count - 1;
+        if (last < 2) return;
+        var wrapped = grid.ActualWidth < GetWrapLastBelow(grid);
+        if (grid.GetValue(WrappedProperty) is bool current && current == wrapped) return;
+        grid.SetValue(WrappedProperty, wrapped);
+        if (grid.RowDefinitions.Count == 0)
+        {
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        }
+        foreach (UIElement child in grid.Children)
+        {
+            if (child is not FrameworkElement element) continue;
+            if (Grid.GetColumn(element) != last && Grid.GetRow(element) != 1) continue;
+            if (element.GetValue(OriginalLayoutProperty) is not Tuple<Thickness, HorizontalAlignment> original)
+            {
+                original = Tuple.Create(element.Margin, element.HorizontalAlignment);
+                element.SetValue(OriginalLayoutProperty, original);
+            }
+            var start = GetWrapFromStart(grid) ? 0 : 1;
+            Grid.SetRow(element, wrapped ? 1 : 0);
+            Grid.SetColumn(element, wrapped ? start : last);
+            Grid.SetColumnSpan(element, wrapped ? last + 1 - start : 1);
+            element.HorizontalAlignment = wrapped ? HorizontalAlignment.Left : original.Item2;
+            element.Margin = wrapped ? new Thickness(0, 10, 0, 0) : original.Item1;
+        }
+    }
+
     private static void OnPlaceholderChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is PasswordBox pb)

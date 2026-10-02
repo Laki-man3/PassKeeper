@@ -64,6 +64,19 @@ public static class EntryMatcher
             .ToList();
     }
 
+    /// <summary>
+    /// The entry to fill without asking (matches as returned by <see cref="Match"/>). On a site: the only entry of the
+    /// site or its domain, or the only one saved for exactly this address — other accounts of the same domain (a
+    /// company's other services) do not count against it. In a program: the only entry for its windows.
+    /// </summary>
+    public static VaultEntry? Obvious(IReadOnlyList<EntryMatch> matches, bool site)
+    {
+        if (matches.Count == 0) return null;
+        var top = matches[0];
+        if (matches.Count == 1) return top.Score >= (site ? 70 : 95) ? top.Entry : null;
+        return top.Score >= 95 && matches[1].Score < top.Score ? top.Entry : null;
+    }
+
     /// <summary>Case-insensitive wildcard match supporting '*' and '?'. Plain text matches as a substring.</summary>
     public static bool WildcardMatch(string? input, string pattern)
     {

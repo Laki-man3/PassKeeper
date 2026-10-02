@@ -192,7 +192,7 @@ public static class ClientDetector
                 }
                 return new SignInForm(login && (password || pin), password, pin, otp);
             }
-            catch (Exception ex) when (ex is ElementNotAvailableException or InvalidOperationException or COMException or ArgumentException)
+            catch (Exception ex) when (ex is ElementNotAvailableException or TimeoutException or InvalidOperationException or COMException or ArgumentException)
             {
                 return SignInForm.None;
             }

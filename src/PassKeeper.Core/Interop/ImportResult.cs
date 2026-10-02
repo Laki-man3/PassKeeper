@@ -36,12 +36,6 @@ public sealed class ImportResult
     public List<ImportWarning> Warnings { get; } = [];
 
     public void Warn(string code, params object[] args) => Warnings.Add(new ImportWarning(code, args));
-
-    public void Merge(ImportResult other)
-    {
-        Entries.AddRange(other.Entries);
-        Warnings.AddRange(other.Warnings);
-    }
 }
 
 public static class ImportHelpers

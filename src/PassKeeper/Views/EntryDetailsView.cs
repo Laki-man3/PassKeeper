@@ -56,13 +56,13 @@ public sealed class EntryDetailsView : UserControl
         var fields = new StackPanel();
         var login = entry.Username;
         if (login.Length > 0) fields.Children.Add(Row(Loc.T("Field.Login"), login, "\uE77B"));
-        if (entry.Password.Length > 0) fields.Children.Add(SecretRow(Loc.T("Field.Password"), entry.Password, "\uE8D7", showStrength: true));
-        if (entry.StoredPin().Length > 0) fields.Children.Add(SecretRow(Loc.T("Editor.Pin"), entry.StoredPin(), "\uE928", showStrength: false));
+        if (entry.Password.Length > 0) fields.Children.Add(SecretRow(Loc.T("Field.Password"), entry.Password, "\uE8D7"));
+        if (entry.StoredPin().Length > 0) fields.Children.Add(SecretRow(Loc.T("Editor.Pin"), entry.StoredPin(), "\uE928"));
         var urlLabel = Loc.T(entry.EffectiveCategory == EntryCategory.Remote ? "Editor.Server" : "Field.Website");
         foreach (var url in entry.AllUrls()) fields.Children.Add(Row(urlLabel, url, "\uE774", isLink: true));
         if (entry.Email.Length > 0) fields.Children.Add(Row(Loc.T("Field.Email"), entry.Email, "\uE715"));
         if (entry.Phone.Length > 0) fields.Children.Add(Row(Loc.T("Field.Phone"), entry.Phone, "\uE717"));
-        if (entry.SecretKey.Length > 0) fields.Children.Add(SecretRow(Loc.T("Field.Key"), entry.SecretKey, "\uE192", showStrength: false));
+        if (entry.SecretKey.Length > 0) fields.Children.Add(SecretRow(Loc.T("Field.Key"), entry.SecretKey, "\uE192"));
         if (Totp.Parse(entry.Totp) is { } totp) fields.Children.Add(TotpRow(totp));
         if (fields.Children.Count > 0) root.Children.Add(Card(fields));
 
@@ -72,7 +72,7 @@ public sealed class EntryDetailsView : UserControl
             root.Children.Add(SectionTitle(Loc.T("Details.CustomFields")));
             var custom = new StackPanel();
             foreach (var f in entry.CustomFields.Where(f => f != pinField))
-                custom.Children.Add(f.Protected ? SecretRow(f.Name, f.Value, "\uE8D7", false) : Row(f.Name, f.Value, "\uE8EC"));
+                custom.Children.Add(f.Protected ? SecretRow(f.Name, f.Value, "\uE8D7") : Row(f.Name, f.Value, "\uE8EC"));
             root.Children.Add(Card(custom));
         }
 
@@ -109,7 +109,7 @@ public sealed class EntryDetailsView : UserControl
             root.Children.Add(SectionTitle(Loc.F("Details.History", entry.PasswordHistory.Count)));
             var history = new StackPanel();
             foreach (var h in entry.PasswordHistory)
-                history.Children.Add(SecretRow(h.ChangedUtc.ToLocalTime().ToString("g", CultureInfo.CurrentUICulture), h.Password, "\uE81C", false));
+                history.Children.Add(SecretRow(h.ChangedUtc.ToLocalTime().ToString("g", CultureInfo.CurrentUICulture), h.Password, "\uE81C"));
             root.Children.Add(Card(history));
         }
 
@@ -147,7 +147,7 @@ public sealed class EntryDetailsView : UserControl
         Grid.SetColumn(titles, 1);
         grid.Children.Add(titles);
 
-        var actions = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        var actions = new WrapPanel { VerticalAlignment = VerticalAlignment.Center };
         if (e.IsDeleted)
         {
             var restore = new Button { Style = S("Btn.Secondary"), Content = Loc.T("Vault.Restore") };
@@ -187,6 +187,9 @@ public sealed class EntryDetailsView : UserControl
         }
         Grid.SetColumn(actions, 2);
         grid.Children.Add(actions);
+        // In a narrow pane the buttons go under the title instead of pushing it out.
+        UI.SetWrapFromStart(grid, true);
+        UI.SetWrapLastBelow(grid, 560);
         return grid;
     }
 
@@ -213,8 +216,9 @@ public sealed class EntryDetailsView : UserControl
     {
         var border = new Border { CornerRadius = new CornerRadius(6), Padding = new Thickness(7, 2, 8, 3), Margin = new Thickness(0, 0, 6, 4) };
         border.SetResourceReference(Border.BackgroundProperty, "Brush.SurfaceAlt");
-        var panel = new StackPanel { Orientation = Orientation.Horizontal };
-        var ic = new TextBlock { Text = icon, Style = S("Icon"), FontSize = 11, Margin = new Thickness(0, 0, 5, 0) };
+        // A dock panel (not a stack panel) lets a long text be shortened with "…" when the line is narrow.
+        var panel = new DockPanel();
+        var ic = new TextBlock { Text = icon, Style = S("Icon"), FontSize = 11, Margin = new Thickness(0, 0, 5, 0), VerticalAlignment = VerticalAlignment.Center };
         ic.SetResourceReference(TextBlock.ForegroundProperty, "Brush.TextMuted");
         panel.Children.Add(ic);
         var t = new TextBlock { Text = text, FontSize = 12, TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = 260 };
@@ -298,16 +302,11 @@ public sealed class EntryDetailsView : UserControl
         return Wrap(row);
     }
 
-    private FrameworkElement SecretRow(string label, string value, string icon, bool showStrength)
+    private FrameworkElement SecretRow(string label, string value, string icon)
     {
         var row = RowShell(label, icon, out var host, out var actions);
         var text = new TextBlock { Text = new string('•', Math.Min(value.Length, 16)), FontSize = 15, TextWrapping = TextWrapping.Wrap, FontFamily = (FontFamily)FindResource("Font.Mono") };
         host.Children.Add(text);
-        if (showStrength)
-        {
-            var meter = new StrengthMeter { Password = value, Margin = new Thickness(0, 8, 0, 0), MaxWidth = 280, HorizontalAlignment = HorizontalAlignment.Left };
-            host.Children.Add(meter);
-        }
         var revealed = false;
         Button? eye = null;
         eye = ActionButton("\uE7B3", Loc.T("Common.ShowHide"), () =>

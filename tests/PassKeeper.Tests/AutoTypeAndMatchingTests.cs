@@ -13,6 +13,36 @@ public class AutoTypeAndMatchingTests
     };
 
     [Fact]
+    public void Obvious_SignInPageOfACompanyDomain()
+    {
+        // The single sign-on page has its own entry; the company's other services share the domain.
+        var sso = new VaultEntry { Title = "SSO", Url = "https://sso.corp.local/auth/realms/x" };
+        var jira = new VaultEntry { Title = "Jira", Url = "https://jira.corp.local" };
+        var portal = new VaultEntry { Title = "Portal", Url = "https://portal.corp.local" };
+        var page = new TargetContext { Url = "https://sso.corp.local/auth/realms/x/protocol/openid-connect/auth?client_id=a", IsBrowser = true };
+        Assert.Equal(sso, EntryMatcher.Obvious(EntryMatcher.Match([jira, sso, portal], page), site: true));
+
+        // Without its own entry nothing is filled by itself: the user chooses.
+        Assert.Null(EntryMatcher.Obvious(EntryMatcher.Match([jira, portal], page), site: true));
+        // The only entry of the domain is the obvious one.
+        Assert.Equal(portal, EntryMatcher.Obvious(EntryMatcher.Match([portal], page), site: true));
+        // Two accounts saved for the same address: the user chooses.
+        var second = new VaultEntry { Title = "SSO 2", Url = "https://sso.corp.local" };
+        Assert.Null(EntryMatcher.Obvious(EntryMatcher.Match([sso, second], page), site: true));
+    }
+
+    [Fact]
+    public void Obvious_ProgramNeedsItsWindows()
+    {
+        var vpn = new VaultEntry { Title = "VPN", WindowPatterns = ["csc_ui.exe"] };
+        var byTitle = new VaultEntry { Title = "Cisco" };
+        var window = new TargetContext { WindowTitle = "Cisco Secure Client | vpn", ProcessName = "csc_ui" };
+        Assert.Equal(vpn, EntryMatcher.Obvious(EntryMatcher.Match([vpn, byTitle], window), site: false));
+        // An entry found only by a word of the title is never filled by itself.
+        Assert.Null(EntryMatcher.Obvious(EntryMatcher.Match([byTitle], window), site: false));
+    }
+
+    [Fact]
     public void Compile_DefaultSequence()
     {
         var actions = AutoTypeSequence.Compile(AutoTypeSequence.Default, Entry);

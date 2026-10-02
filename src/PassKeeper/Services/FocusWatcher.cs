@@ -50,6 +50,9 @@ public sealed class LoginField
     }
 }
 
+/// <summary>A browser page in front of the user without the cursor in any of its fields.</summary>
+public sealed record BrowserPage(AutomationElement Document, IntPtr Window, long Sequence);
+
 /// <summary>
 /// Watches keyboard focus in all applications (UI Automation) and reports when a login, password, e-mail, phone,
 /// one-time-code, token PIN or key field receives focus — the trigger for autofill suggestions in browsers and desktop apps.
@@ -67,15 +70,17 @@ public sealed class FocusWatcher : IDisposable
     private readonly System.Collections.Concurrent.ConcurrentDictionary<int, bool> _browsers = new();
     private AutomationFocusChangedEventHandler? _handler;
     private long _sequence;
-    private (IntPtr Window, Rect Bounds) _reported;
 
     public event Action<LoginField>? LoginFieldFocused;
     public event Action? FocusLeft;
-    /// <summary>A browser process got focus for the first time (its page loads can then be watched).</summary>
-    public event Action<int>? BrowserSeen;
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<int, bool> _announced = new();
+    /// <summary>
+    /// A browser page came to the front (loaded, or the user switched to it) and the cursor is in none of its fields:
+    /// reported once, a moment after the page got focus, so that its sign-in form can be looked for.
+    /// </summary>
+    public event Action<BrowserPage>? PageShown;
 
-    public bool IsRunning => _handler != null;
+    /// <summary>Focus has not moved since the event with this sequence number.</summary>
+    public bool IsCurrent(long sequence) => _handler != null && Interlocked.Read(ref _sequence) == sequence;
 
     private static CacheRequest CreateCacheRequest()
     {
@@ -129,39 +134,71 @@ public sealed class FocusWatcher : IDisposable
             catch (InvalidOperationException) { info = element.Current; } // cache not supported by the provider
             if (info.ProcessId == _ownPid) return;
             var browser = IsBrowser(info.ProcessId);
-            if (browser && _announced.TryAdd(info.ProcessId, true)) BrowserSeen?.Invoke(info.ProcessId);
-            if (info.ControlType != ControlType.Edit && (info.ControlType == ControlType.Document || info.ControlType == ControlType.Pane) && browser)
+            if (browser && (info.ControlType == ControlType.Document || info.ControlType == ControlType.Pane || info.ControlType == ControlType.Window))
             {
                 // A page that puts the cursor into its login field by itself (autofocus) gets no focus event for that
                 // field from the browser, only for the document: ask the browser a moment later where the cursor is.
-                Left();
-                ProbeBrowserFocus(sequence, skipReported: false);
+                FocusLeft?.Invoke();
+                ProbeBrowserFocus(sequence);
                 return;
             }
             if (info.ControlType != ControlType.Edit || !info.IsEnabled)
             {
-                Left();
+                FocusLeft?.Invoke();
                 return;
             }
             var kind = FieldClassifier.Classify(info.IsPassword, info.Name, info.AutomationId, info.HelpText);
             var bounds = info.BoundingRectangle;
+            // VPN clients often leave the login box without a label: in a known client's window it is the login.
+            if (kind == null && !browser && !info.IsPassword && string.IsNullOrWhiteSpace(info.Name) && IsKnownClient(info.ProcessId))
+                kind = FieldKind.Login;
             if (kind == null || bounds.IsEmpty || bounds.Width < 20)
             {
-                Left();
+                FocusLeft?.Invoke();
                 // The field of a page that is still loading has no name and no place yet: look again a moment later.
-                if (browser && bounds.IsEmpty) ProbeBrowserFocus(sequence, skipReported: false);
+                if (browser && bounds.IsEmpty) ProbeBrowserFocus(sequence);
                 return;
             }
-            var field = new LoginField { Element = element, Kind = kind.Value, Bounds = bounds, Window = Native.GetForegroundWindow() };
+            // The field must belong to the window in front: a closing sign-in dialog may report its field after another
+            // window has already come forward.
+            var window = Native.GetForegroundWindow();
+            Native.GetWindowThreadProcessId(window, out var windowPid);
+            if (windowPid != info.ProcessId)
+            {
+                FocusLeft?.Invoke();
+                return;
+            }
+            var field = new LoginField { Element = element, Kind = kind.Value, Bounds = bounds, Window = window };
             // Report only if focus stays here for a moment (tabbing through a form produces a burst of events).
             Task.Delay(90).ContinueWith(_ =>
             {
-                if (Interlocked.Read(ref _sequence) == sequence && _handler != null) Report(field);
+                if (IsCurrent(sequence)) LoginFieldFocused?.Invoke(field);
             }, TaskScheduler.Default);
         }
         catch (ElementNotAvailableException) { }
+        catch (TimeoutException) { } // the program does not answer UI Automation in time
         catch (System.Runtime.InteropServices.COMException) { }
         catch (InvalidOperationException) { }
+    }
+
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<int, string> _processNames = new();
+
+    /// <summary>The window in front belongs to a known sign-in client (VPN, remote access, token PIN prompt).</summary>
+    private bool IsKnownClient(int pid)
+    {
+        var name = _processNames.GetOrAdd(pid, id =>
+        {
+            try
+            {
+                using var p = System.Diagnostics.Process.GetProcessById(id);
+                return p.ProcessName;
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+            {
+                return "";
+            }
+        });
+        return name.Length > 0 && KnownApps.Match(name, Native.GetWindowTitle(Native.GetForegroundWindow())) != null;
     }
 
     private bool IsBrowser(int pid) => _browsers.GetOrAdd(pid, id =>
@@ -177,53 +214,63 @@ public sealed class FocusWatcher : IDisposable
         }
     });
 
-    private void Left()
-    {
-        _reported = default;
-        FocusLeft?.Invoke();
-    }
-
-    private void Report(LoginField field)
-    {
-        _reported = (field.Window, field.Bounds);
-        LoginFieldFocused?.Invoke(field);
-    }
+    private static readonly int[] ProbeDelays = [400, 600, 1000, 1500, 2500];
 
     /// <summary>
-    /// A page was loaded in the active browser window: look where the cursor is. A field already reported (the page
-    /// only changed its title while the user types) is not reported again.
+    /// The active browser window changed its page (or came to the front): look where the cursor is. Needed for
+    /// browsers that send no focus events from their pages.
     /// </summary>
-    public void ProbeNow()
+    public void ProbePage()
     {
-        if (_handler == null) return;
-        ProbeBrowserFocus(Interlocked.Increment(ref _sequence), skipReported: true);
+        if (_handler != null) ProbeBrowserFocus(Interlocked.Increment(ref _sequence));
     }
 
-    private void ProbeBrowserFocus(long sequence, bool skipReported)
+    private void ProbeBrowserFocus(long sequence)
     {
         Task.Run(async () =>
         {
-            foreach (var delay in new[] { 400, 600, 1000, 1500, 2500 })
+            var pageReported = false;
+            foreach (var delay in ProbeDelays)
             {
                 await Task.Delay(delay);
-                if (Interlocked.Read(ref _sequence) != sequence || _handler == null) return;
+                if (!IsCurrent(sequence)) return;
                 try
                 {
                     var focused = AutomationElement.FocusedElement?.GetUpdatedCache(Properties);
                     if (focused == null) continue;
                     var info = focused.Cached;
-                    if (info.ControlType != ControlType.Edit || !info.IsEnabled || info.ProcessId == _ownPid) continue;
+                    // A browser window that is just opening may not have taken the focus yet: look again later.
+                    if (info.ProcessId == _ownPid || !IsBrowser(info.ProcessId)) continue;
+                    if (info.ControlType == ControlType.Document || info.ControlType == ControlType.Window || info.ControlType == ControlType.Pane)
+                    {
+                        // The page shows no cursor in a field: once it has had a moment to appear, report the page.
+                        // Some browsers keep the focus on the window: its page is then found below it.
+                        if (!pageReported && delay >= 600)
+                        {
+                            var window = Native.GetForegroundWindow();
+                            var page = info.ControlType == ControlType.Document ? focused : FieldFinder.PageOf(window);
+                            if (page != null && IsCurrent(sequence))
+                            {
+                                pageReported = true;
+                                PageShown?.Invoke(new BrowserPage(page, window, sequence));
+                            }
+                        }
+                        continue;
+                    }
+                    if (info.ControlType != ControlType.Edit || !info.IsEnabled) continue;
                     var kind = FieldClassifier.Classify(info.IsPassword, info.Name, info.AutomationId, info.HelpText);
                     var bounds = info.BoundingRectangle;
                     // A page still being built shows its field without a name or place at first: ask again later.
                     if (kind == null || bounds.IsEmpty || bounds.Width < 20) continue;
-                    if (Interlocked.Read(ref _sequence) != sequence) return;
-                    var window = Native.GetForegroundWindow();
-                    if (skipReported && _reported == (window, bounds)) return;
-                    Report(new LoginField { Element = focused, Kind = kind.Value, Bounds = bounds, Window = window });
+                    if (!IsCurrent(sequence)) return;
+                    var front = Native.GetForegroundWindow();
+                    Native.GetWindowThreadProcessId(front, out var frontPid);
+                    if (frontPid != info.ProcessId) return;
+                    LoginFieldFocused?.Invoke(new LoginField { Element = focused, Kind = kind.Value, Bounds = bounds, Window = front });
                     return;
                 }
                 catch (ElementNotAvailableException) { }
+                catch (TimeoutException) { } // the program does not answer UI Automation in time
                 catch (System.Runtime.InteropServices.COMException) { }
                 catch (InvalidOperationException) { }
             }

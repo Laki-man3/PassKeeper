@@ -20,7 +20,7 @@
             <Button Style="{StaticResource Btn.Icon}" Content="&#xE711;" HorizontalAlignment="Right" Click="Close_Click" />
         </Grid>
 
-        <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False">
+        <ScrollViewer x:Name="Scroll" VerticalScrollBarVisibility="Auto" Focusable="False">
             <StackPanel Margin="26,0,26,20">
 
                 <!-- General -->
@@ -160,20 +160,33 @@
                 <!-- About -->
                 <TextBlock Style="{StaticResource Text.Label}" Text="{l:T Settings.About}" />
                 <Border Style="{StaticResource SectionCard}" Padding="18,16">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition />
-                        </Grid.ColumnDefinitions>
-                        <Image Source="{StaticResource LogoImage}" Width="44" Height="44" VerticalAlignment="Top" />
-                        <StackPanel Grid.Column="1" Margin="14,0,0,0">
-                            <TextBlock x:Name="Version" FontWeight="SemiBold" FontSize="14" />
-                            <TextBlock x:Name="InstallMode" Style="{StaticResource Text.Muted}" Margin="0,2,0,0" />
-                            <TextBlock Style="{StaticResource Text.Secondary}" FontSize="12.5" Margin="0,8,0,0" Text="{l:T Settings.AboutText}" />
-                            <Button x:Name="UninstallButton" Style="{StaticResource Btn.Link}" HorizontalAlignment="Left" Margin="-8,8,0,0"
-                                    Content="{l:T Settings.Uninstall}" Click="Uninstall_Click" Visibility="Collapsed" />
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition />
+                            </Grid.ColumnDefinitions>
+                            <Image Source="{StaticResource LogoImage}" Width="44" Height="44" VerticalAlignment="Top" />
+                            <StackPanel Grid.Column="1" Margin="14,0,0,0">
+                                <TextBlock x:Name="Version" FontWeight="SemiBold" FontSize="14" />
+                                <TextBlock x:Name="InstallMode" Style="{StaticResource Text.Muted}" Margin="0,2,0,0" />
+                                <TextBlock Style="{StaticResource Text.Secondary}" FontSize="12.5" Margin="0,8,0,0" Text="{l:T Settings.AboutText}" />
+                                <Button x:Name="UninstallButton" Style="{StaticResource Btn.Link}" HorizontalAlignment="Left" Margin="-8,8,0,0"
+                                        Content="{l:T Settings.Uninstall}" Click="Uninstall_Click" Visibility="Collapsed" />
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- feedback: how to reach the author -->
+                        <Border Height="1" Margin="0,16,0,14" Background="{DynamicResource Brush.Border}" />
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE939;" FontSize="15" Foreground="{DynamicResource Brush.AccentText}" Margin="0,0,9,0" VerticalAlignment="Center" />
+                            <TextBlock Text="{l:T About.FeedbackTitle}" FontWeight="SemiBold" FontSize="13.5" VerticalAlignment="Center" />
                         </StackPanel>
-                    </Grid>
+                        <TextBlock Style="{StaticResource Text.Muted}" Margin="0,4,0,12" TextWrapping="Wrap" Text="{l:T About.FeedbackText}" />
+                        <Border BorderBrush="{DynamicResource Brush.Border}" BorderThickness="1" CornerRadius="10" Background="{DynamicResource Brush.SurfaceAlt}">
+                            <StackPanel x:Name="Contacts" Margin="4" />
+                        </Border>
+                    </StackPanel>
                 </Border>
             </StackPanel>
         </ScrollViewer>

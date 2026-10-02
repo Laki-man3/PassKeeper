@@ -20,6 +20,9 @@ public sealed class AutoTypeService
     /// <summary>Keystrokes are being sent right now (a second fill would interleave with them).</summary>
     public bool IsTyping => Volatile.Read(ref _typing) > 0;
 
+    /// <summary>The hotkey is being handled (the user may be choosing an entry): automatic sign-in stands aside.</summary>
+    public bool IsBusy => _busy || IsTyping;
+
     /// <summary>A window was filled (by the hotkey, a suggestion or after saving a new entry).</summary>
     public event Action<IntPtr>? WindowFilled;
 
@@ -41,7 +44,6 @@ public sealed class AutoTypeService
     {
         if (_busy) return;
         _busy = true;
-        Interlocked.Increment(ref _typing); // the user asked explicitly: automatic sign-in stands aside
         try
         {
             var hwnd = Native.GetForegroundWindow();
@@ -88,12 +90,19 @@ public sealed class AutoTypeService
                 CopyInsteadOfTyping(entry, target.Describe(), field?.Kind ?? FieldKind.Password);
                 return;
             }
+            // A page without the cursor in its form: the form is found and the cursor put into it.
+            if (field == null && target.IsBrowser && string.IsNullOrWhiteSpace(entry.AutoTypeSequence))
+            {
+                Native.ForceForeground(hwnd);
+                field = await Task.Run(() => FieldFinder.FindSignInField(hwnd) is { } found && PutCursorInto(found) ? found : null);
+            }
             // Without a custom sequence fill by fields: a pre-filled login (VPN clients remember it) is kept and
             // a PIN, code or key field gets just that value.
             if (field != null && string.IsNullOrWhiteSpace(entry.AutoTypeSequence))
             {
                 Native.ForceForeground(hwnd);
                 await Task.Delay(120);
+                MarkFilled(hwnd, target);
                 await FillFieldAsync(entry, field);
                 return;
             }
@@ -102,7 +111,6 @@ public sealed class AutoTypeService
         finally
         {
             _busy = false;
-            Interlocked.Decrement(ref _typing);
         }
     }
 
@@ -136,11 +144,9 @@ public sealed class AutoTypeService
         await TypeAsync(entry, target, AutoTypeSequence.EffectiveSequence(entry, _app.Settings.SubmitAfterFill));
     }
 
-    /// <summary>
-    /// Brings the window forward and fills its login form: the focused field, otherwise the first password / PIN
-    /// field (its login field is filled from there) or login field. A custom sequence is typed from that field.
-    /// </summary>
-    private readonly Dictionary<string, DateTime> _webFilled = [];
+    private readonly Dictionary<string, DateTime> _autoFilled = [];
+    private readonly HashSet<string> _autoFilling = [];
+    private (IntPtr Window, DateTime At, List<System.Windows.Rect> Fields) _lastFill = (IntPtr.Zero, DateTime.MinValue, []);
 
     /// <summary>
     /// Links an entry to the site or program it was just used for (another address / a window pattern), so that it
@@ -168,26 +174,80 @@ public sealed class AutoTypeService
     }
 
     /// <summary>
-    /// Fills a site's sign-in form by itself when the page puts the cursor into an empty login or password field and
-    /// exactly one entry matches the site. A page (window and address) is filled once in 3 minutes — a failed sign-in
-    /// that reloads the page is not filled again — and fields already filled by the browser or the user are left alone.
+    /// Fills a sign-in form by itself: the cursor is in an empty login or password field (or, with
+    /// <paramref name="putCursor"/>, is put into it) and one entry clearly belongs to the site or program. A page or
+    /// window is filled once in 3 minutes (a failed sign-in that shows the form again is not filled again), and fields
+    /// already filled by the browser, the client or the user are left alone.
     /// </summary>
-    public async Task<bool> TryAutoFillWebAsync(VaultEntry entry, LoginField field, TargetWindow target)
+    public async Task<bool> TryAutoFillAsync(VaultEntry entry, LoginField field, TargetWindow target, bool putCursor = false)
     {
         if (IsTyping || field.Kind is not (FieldKind.Login or FieldKind.Email or FieldKind.Phone or FieldKind.Password)) return false;
-        var host = DomainUtil.GetHost(target.Url);
-        if (host == null) return false;
-        foreach (var old in _webFilled.Where(p => DateTime.UtcNow - p.Value > TimeSpan.FromMinutes(3)).Select(p => p.Key).ToList()) _webFilled.Remove(old);
-        var key = field.Window + "|" + target.Url;
-        if (_webFilled.ContainsKey(key)) return false;
-        var login = ValueFor(entry, FieldKind.Login);
-        if (!await Task.Run(() => IsUntouched(field, login))) return false;
-        // The page may still be moving the cursor, or the user may start typing: check again after a moment.
-        await Task.Delay(250);
-        if (!await Task.Run(() => IsFocused(field) && IsUntouched(field, login))) return false;
-        _webFilled[key] = DateTime.UtcNow;
-        await FillFieldAsync(entry, field, _app.Settings.SubmitAfterFill);
-        return true;
+        var place = Place(field.Window, target);
+        if (place == null) return false;
+        foreach (var old in _autoFilled.Where(p => DateTime.UtcNow - p.Value > TimeSpan.FromMinutes(3)).Select(p => p.Key).ToList()) _autoFilled.Remove(old);
+        if (_autoFilled.ContainsKey(place) || !_autoFilling.Add(place)) return false;
+        try
+        {
+            var login = ValueFor(entry, FieldKind.Login);
+            if (!await Task.Run(() => IsUntouched(field, login))) return false;
+            // The page may still be moving the cursor, or the user may start typing: check again after a moment.
+            await Task.Delay(250);
+            if (IsTyping) return false;
+            if (!await Task.Run(() => (putCursor ? PutCursorInto(field) : IsFocused(field)) && IsUntouched(field, login))) return false;
+            _autoFilled[place] = DateTime.UtcNow;
+            await FillFieldAsync(entry, field, _app.Settings.SubmitAfterFill);
+            return true;
+        }
+        finally
+        {
+            _autoFilling.Remove(place);
+        }
+    }
+
+    /// <summary>A page (window and address) or a program window (window and title): filled at most once in 3 minutes by itself.</summary>
+    private static string? Place(IntPtr window, TargetWindow target) => target.IsBrowser
+        ? DomainUtil.GetHost(target.Url) != null ? window + "|" + target.Url : null
+        : window + "|" + target.Title;
+
+    /// <summary>
+    /// A form was filled at the user's request (suggestion, hotkey, chosen entry): it is not filled again by itself
+    /// when the cursor moves on through it.
+    /// </summary>
+    public void MarkFilled(IntPtr window, TargetWindow? target)
+    {
+        if (target != null && Place(window, target) is { } place) _autoFilled[place] = DateTime.UtcNow;
+    }
+
+    /// <summary>The form of this page or window is being filled by itself right now.</summary>
+    public bool IsAutoFilling(IntPtr window) => _autoFilling.Any(p => p.StartsWith(window + "|", StringComparison.Ordinal));
+
+    /// <summary>The field was filled a moment ago (the cursor moving on through a form just filled needs no suggestion).</summary>
+    public bool JustFilled(LoginField field) =>
+        _lastFill.Window == field.Window && DateTime.UtcNow - _lastFill.At < TimeSpan.FromSeconds(3) && _lastFill.Fields.Contains(field.Bounds);
+
+    /// <summary>
+    /// Puts the cursor into a field the user has not clicked: through UI Automation, otherwise (browsers ignore it) by
+    /// clicking the field, only when the window is in front and nothing covers the field at that point.
+    /// </summary>
+    public static bool PutCursorInto(LoginField field)
+    {
+        try
+        {
+            if (FieldFinder.IsFocused(field.Element)) return true;
+            if (Native.GetForegroundWindow() != field.Window) return false;
+            var unreported = FieldFinder.FocusStaysOnWindow(field.Window);
+            if (!unreported && FieldFinder.FocusAndVerify(field.Element)) return true;
+            if (!FieldFinder.Click(field.Element, field.Window)) return false;
+            // A browser that does not report the cursor (Yandex): the click on the uncovered field put it there.
+            if (unreported) return true;
+            for (var i = 0; i < 8; i++)
+            {
+                if (FieldFinder.IsFocused(field.Element)) return true;
+                Thread.Sleep(40);
+            }
+        }
+        catch (Exception ex) when (ex is ElementNotAvailableException or TimeoutException or InvalidOperationException or System.Runtime.InteropServices.COMException) { }
+        return false;
     }
 
     /// <summary>
@@ -196,6 +256,9 @@ public sealed class AutoTypeService
     /// </summary>
     private static bool MoveTo(AutomationElement target, KeyboardSender sender, bool back)
     {
+        // A browser that does not report the cursor in its pages: the field is clicked (only if nothing covers it).
+        var window = sender.TargetWindow;
+        if (window != IntPtr.Zero && FieldFinder.FocusStaysOnWindow(window)) return FieldFinder.Click(target, window);
         if (FieldFinder.FocusAndVerify(target)) return true;
         if (back) sender.ShiftTab();
         else sender.PressKey("TAB");
@@ -228,7 +291,7 @@ public sealed class AutoTypeService
         {
             Native.ForceForeground(hwnd);
             await Task.Delay(250);
-            var field = FocusedField(hwnd) ?? await Task.Run(() => FieldFinder.FirstSignInField(hwnd));
+            var field = await Task.Run(() => FocusedField(hwnd) ?? FieldFinder.FirstSignInField(hwnd));
             if (field != null) await Task.Run(() => FieldFinder.Focus(field.Element));
             if (!string.IsNullOrWhiteSpace(entry.AutoTypeSequence))
             {
@@ -257,7 +320,7 @@ public sealed class AutoTypeService
                 var focused = AutomationElement.FocusedElement;
                 return focused != null && focused.Current.ProcessId == pid ? LoginField.From(focused, hwnd) : null;
             }
-            catch (Exception ex) when (ex is ElementNotAvailableException or InvalidOperationException or System.Runtime.InteropServices.COMException)
+            catch (Exception ex) when (ex is ElementNotAvailableException or TimeoutException or InvalidOperationException or System.Runtime.InteropServices.COMException)
             {
                 return null;
             }
@@ -303,7 +366,7 @@ public sealed class AutoTypeService
             return;
         }
 
-        Native.ForceForeground(target.Handle);
+        if (!Native.ForceForeground(target.Handle) && Native.IsHungAppWindow(target.Handle)) return;
         if (Native.IsInputBlocked(target.Handle))
         {
             CopyInsteadOfTyping(entry, target.Describe(), FieldKind.Password);
@@ -365,6 +428,7 @@ public sealed class AutoTypeService
     /// <summary>Suggestion click: fill the focused field (and its login/password counterpart) in place.</summary>
     public async Task FillFieldAsync(VaultEntry entry, LoginField field, bool? submitAfter = null)
     {
+        if (Native.IsHungAppWindow(field.Window)) return;
         if (Native.IsInputBlocked(field.Window))
         {
             CopyInsteadOfTyping(entry, Native.GetWindowTitle(field.Window), field.Kind);
@@ -373,6 +437,7 @@ public sealed class AutoTypeService
         var login = ValueFor(entry, FieldKind.Login);
         var sender = CreateSender(field.Window);
         var submit = submitAfter ?? _app.Settings.SubmitAfterFill;
+        var filled = new List<System.Windows.Rect> { field.Bounds };
         Interlocked.Increment(ref _typing);
         try
         {
@@ -390,10 +455,11 @@ public sealed class AutoTypeService
                     var user = FieldFinder.FindUsernameBefore(field.Element);
                     if (user != null && login.Length > 0 && FieldFinder.GetValue(user) != login && MoveTo(user, sender, back: true))
                     {
+                        filled.Add(FieldFinder.Bounds(user));
                         sender.ClearField();
                         sender.TypeText(login);
                         FieldFinder.WaitForValue(user, login);
-                        if (!MoveTo(field.Element, sender, back: false)) return;
+                        if (!MoveTo(field.Element, sender, back: false) || FieldFinder.IsFocused(user)) return;
                     }
                     sender.ClearField();
                     sender.TypeText(entry.Password);
@@ -408,12 +474,16 @@ public sealed class AutoTypeService
                     if (password != null && entry.Password.Length > 0)
                     {
                         if (!MoveTo(password, sender, back: false)) return;
+                        // A password is never typed while the cursor is still reported in the login field.
+                        if (FieldFinder.IsFocused(field.Element)) return;
+                        filled.Add(FieldFinder.Bounds(password));
                         sender.ClearField();
                         sender.TypeText(entry.Password);
                     }
                 }
                 if (submit) sender.PressKey("ENTER");
             });
+            _lastFill = (field.Window, DateTime.UtcNow, filled);
             _app.Vault.MarkUsed(entry.Id);
             WindowFilled?.Invoke(field.Window);
         }
@@ -438,6 +508,177 @@ internal static class FieldFinder
     private static readonly Condition EditCondition = new AndCondition(
         new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Edit),
         new PropertyCondition(AutomationElement.IsEnabledProperty, true));
+
+    private static readonly Condition VisibleEditCondition = new AndCondition(
+        new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Edit),
+        new PropertyCondition(AutomationElement.IsEnabledProperty, true),
+        new PropertyCondition(AutomationElement.IsOffscreenProperty, false));
+
+    private static readonly Condition VisiblePasswordCondition = new AndCondition(
+        VisibleEditCondition,
+        new PropertyCondition(AutomationElement.IsPasswordProperty, true));
+
+    /// <summary>
+    /// The sign-in form of a page the cursor is not in: the login field before the first visible password field (or
+    /// that password field), otherwise (sign-in in two steps) the first visible login, e-mail or phone field.
+    /// </summary>
+    public static LoginField? FindSignInField(AutomationElement page, IntPtr window)
+    {
+        try
+        {
+            var password = page.FindFirst(TreeScope.Descendants, VisiblePasswordCondition);
+            if (password != null)
+            {
+                var user = FindUsernameBefore(password);
+                if (user != null && LoginNear(user, password) is { } login) return Describe(user, window, login);
+                return Describe(password, window, FieldKind.Password);
+            }
+            var checkedFields = 0;
+            foreach (AutomationElement edit in page.FindAll(TreeScope.Descendants, VisibleEditCondition))
+            {
+                if (++checkedFields > 20) break;
+                var info = edit.Current;
+                var kind = FieldClassifier.Classify(info.IsPassword, info.Name, info.AutomationId, info.HelpText);
+                if (kind is FieldKind.Login or FieldKind.Email or FieldKind.Phone) return Describe(edit, window, kind.Value);
+            }
+        }
+        catch (Exception ex) when (ex is ElementNotAvailableException or TimeoutException or InvalidOperationException or System.Runtime.InteropServices.COMException or ArgumentException) { }
+        return null;
+    }
+
+    /// <summary>The sign-in form of the page shown in a browser window (hotkey without the cursor in a field).</summary>
+    public static LoginField? FindSignInField(IntPtr window)
+    {
+        try
+        {
+            Native.GetWindowThreadProcessId(window, out var pid);
+            var focused = AutomationElement.FocusedElement;
+            var page = focused != null && focused.Current.ProcessId == pid ? Container(focused) : null;
+            if (page == null || page.Current.ControlType != ControlType.Document) page = PageOf(window);
+            return page == null ? null : FindSignInField(page, window);
+        }
+        catch (Exception ex) when (ex is ElementNotAvailableException or TimeoutException or InvalidOperationException or System.Runtime.InteropServices.COMException or ArgumentException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The page (document) shown in a browser window. Some browsers (Yandex) report focus on the window itself rather
+    /// than on the page: the element in the middle of the window leads to it in a few steps up.
+    /// </summary>
+    public static AutomationElement? PageOf(IntPtr window)
+    {
+        try
+        {
+            if (!Native.GetWindowRect(window, out var r) || r.Right - r.Left < 100) return null;
+            Native.GetWindowThreadProcessId(window, out var pid);
+            var at = AutomationElement.FromPoint(new System.Windows.Point((r.Left + r.Right) / 2.0, r.Top + (r.Bottom - r.Top) * 0.6));
+            var walker = TreeWalker.ControlViewWalker;
+            for (var depth = 0; at != null && depth < 8; depth++)
+            {
+                var info = at.Current;
+                if (info.ProcessId != pid) return null;
+                if (info.ControlType == ControlType.Document) return at;
+                at = walker.GetParent(at);
+            }
+        }
+        catch (Exception ex) when (ex is ElementNotAvailableException or TimeoutException or InvalidOperationException or System.Runtime.InteropServices.COMException or ArgumentException) { }
+        return null;
+    }
+
+    /// <summary>
+    /// The text box before a password field is its login when it is labelled as one, or when it has no label and sits
+    /// right above or beside the password (a search box elsewhere on the page is not).
+    /// </summary>
+    private static FieldKind? LoginNear(AutomationElement user, AutomationElement password)
+    {
+        var info = user.Current;
+        var kind = FieldClassifier.Classify(false, info.Name, info.AutomationId, info.HelpText);
+        if (kind is FieldKind.Login or FieldKind.Email or FieldKind.Phone) return kind;
+        if (kind != null || !string.IsNullOrWhiteSpace(info.Name)) return null;
+        var u = info.BoundingRectangle;
+        var p = password.Current.BoundingRectangle;
+        var below = p.Top - u.Bottom is >= -2 and < 160 && Math.Abs(p.Left - u.Left) < 60;
+        var beside = Math.Abs(p.Top - u.Top) < 8 && p.Left - u.Right is >= -2 and < 80;
+        return below || beside ? FieldKind.Login : null;
+    }
+
+    private static LoginField? Describe(AutomationElement element, IntPtr window, FieldKind kind)
+    {
+        var bounds = element.Current.BoundingRectangle;
+        return bounds.IsEmpty || bounds.Width < 20 ? null : new LoginField { Element = element, Kind = kind, Bounds = bounds, Window = window };
+    }
+
+    /// <summary>
+    /// The browser reports focus on its window only, never on the field with the cursor (Yandex Browser): the cursor
+    /// can then neither be confirmed nor followed through UI Automation.
+    /// </summary>
+    public static bool FocusStaysOnWindow(IntPtr window)
+    {
+        try
+        {
+            var focused = AutomationElement.FocusedElement;
+            if (focused == null) return false;
+            var info = focused.Current;
+            return info.ControlType == ControlType.Window && info.NativeWindowHandle == window.ToInt32();
+        }
+        catch (Exception ex) when (ex is ElementNotAvailableException or TimeoutException or InvalidOperationException or System.Runtime.InteropServices.COMException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Clicks the left part of a field (its right edge often holds a "show password" or clear button) if nothing covers it.</summary>
+    public static bool Click(AutomationElement field, IntPtr window)
+    {
+        try
+        {
+            var r = field.Current.BoundingRectangle;
+            if (r.IsEmpty) return false;
+            var x = (int)(r.Left + Math.Min(r.Width / 2, 24));
+            var y = (int)(r.Top + r.Height / 2);
+            // Right after a page appears the browser may not yet tell what is at a point: a few looks.
+            var uncovered = false;
+            for (var attempt = 0; attempt < 4 && !uncovered; attempt++)
+            {
+                if (attempt > 0) Thread.Sleep(150);
+                uncovered = IsAt(field, x, y);
+            }
+            if (!uncovered || Native.GetForegroundWindow() != window) return false;
+            Native.Click(x, y);
+            Thread.Sleep(60);
+            return true;
+        }
+        catch (Exception ex) when (ex is ElementNotAvailableException or TimeoutException or InvalidOperationException or System.Runtime.InteropServices.COMException)
+        {
+            return false;
+        }
+    }
+
+    public static System.Windows.Rect Bounds(AutomationElement element)
+    {
+        try
+        {
+            return element.Current.BoundingRectangle;
+        }
+        catch (Exception ex) when (ex is ElementNotAvailableException or TimeoutException or InvalidOperationException or System.Runtime.InteropServices.COMException)
+        {
+            return System.Windows.Rect.Empty;
+        }
+    }
+
+    /// <summary>The field itself is at this screen point (not a banner or dialog covering it).</summary>
+    public static bool IsAt(AutomationElement field, int x, int y)
+    {
+        var at = AutomationElement.FromPoint(new System.Windows.Point(x, y));
+        if (at == null) return false;
+        if (Automation.Compare(at, field)) return true;
+        var a = at.Current.BoundingRectangle;
+        var f = field.Current.BoundingRectangle;
+        // Browsers expose the text inside an input as a separate element lying within the input.
+        return !a.IsEmpty && a.Left >= f.Left - 2 && a.Top >= f.Top - 2 && a.Right <= f.Right + 2 && a.Bottom <= f.Bottom + 2;
+    }
 
     private static AutomationElement? Container(AutomationElement element)
     {
@@ -473,6 +714,7 @@ internal static class FieldFinder
                 list.Add(e);
             }
             catch (ElementNotAvailableException) { }
+            catch (TimeoutException) { } // the program does not answer UI Automation in time
         }
         var bounds = element.Current.BoundingRectangle;
         for (var i = 0; i < list.Count && index < 0; i++)
@@ -500,7 +742,7 @@ internal static class FieldFinder
             }
             return login;
         }
-        catch (Exception ex) when (ex is ElementNotAvailableException or InvalidOperationException or System.Runtime.InteropServices.COMException or ArgumentException)
+        catch (Exception ex) when (ex is ElementNotAvailableException or TimeoutException or InvalidOperationException or System.Runtime.InteropServices.COMException or ArgumentException)
         {
             return null;
         }
@@ -514,7 +756,7 @@ internal static class FieldFinder
             for (var i = index - 1; i >= 0 && i >= index - 3; i--)
                 if (!edits[i].Current.IsPassword) return edits[i];
         }
-        catch (Exception ex) when (ex is ElementNotAvailableException or InvalidOperationException or System.Runtime.InteropServices.COMException) { }
+        catch (Exception ex) when (ex is ElementNotAvailableException or TimeoutException or InvalidOperationException or System.Runtime.InteropServices.COMException) { }
         return null;
     }
 
@@ -527,7 +769,7 @@ internal static class FieldFinder
             for (var i = index + 1; i < edits.Count && i <= index + 3; i++)
                 if (edits[i].Current.IsPassword) return edits[i];
         }
-        catch (Exception ex) when (ex is ElementNotAvailableException or InvalidOperationException or System.Runtime.InteropServices.COMException) { }
+        catch (Exception ex) when (ex is ElementNotAvailableException or TimeoutException or InvalidOperationException or System.Runtime.InteropServices.COMException) { }
         return null;
     }
 
@@ -537,7 +779,7 @@ internal static class FieldFinder
         {
             return element.TryGetCurrentPattern(ValuePattern.Pattern, out var p) ? ((ValuePattern)p).Current.Value : null;
         }
-        catch (Exception ex) when (ex is ElementNotAvailableException or InvalidOperationException or System.Runtime.InteropServices.COMException)
+        catch (Exception ex) when (ex is ElementNotAvailableException or TimeoutException or InvalidOperationException or System.Runtime.InteropServices.COMException)
         {
             return null;
         }
@@ -567,7 +809,7 @@ internal static class FieldFinder
             element.SetFocus();
             Thread.Sleep(70);
         }
-        catch (Exception ex) when (ex is ElementNotAvailableException or InvalidOperationException or System.Runtime.InteropServices.COMException) { }
+        catch (Exception ex) when (ex is ElementNotAvailableException or TimeoutException or InvalidOperationException or System.Runtime.InteropServices.COMException) { }
     }
 
     /// <summary>Moves the cursor to the field and confirms it arrived there.</summary>
@@ -593,7 +835,7 @@ internal static class FieldFinder
             var info = focused.Current;
             return info.ControlType == ControlType.Edit && info.BoundingRectangle == element.Current.BoundingRectangle;
         }
-        catch (Exception ex) when (ex is ElementNotAvailableException or InvalidOperationException or System.Runtime.InteropServices.COMException)
+        catch (Exception ex) when (ex is ElementNotAvailableException or TimeoutException or InvalidOperationException or System.Runtime.InteropServices.COMException)
         {
             return false;
         }

@@ -132,7 +132,7 @@ public sealed class ExportDialog : DialogBase
         if (Exporter.IsEncrypted(format))
         {
             var answer = await App.Instance.Main.ShowDialogAsync(new PasswordPromptDialog(Loc.T("Export.PasswordTitle"), Loc.T("Export.PasswordText"),
-                confirm: true, strength: true) { MinLength = 8 });
+                confirm: true) { MinLength = 8 });
             if (answer is not ValueTuple<string, byte[]?> (var pw, _)) return;
             password = pw;
         }

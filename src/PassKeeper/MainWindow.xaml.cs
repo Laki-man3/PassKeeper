@@ -63,6 +63,15 @@ public partial class MainWindow : Window
         layer.SetResourceReference(Panel.BackgroundProperty, "Brush.Overlay");
         layer.Children.Add(card);
         DialogLayer.Children.Add(layer);
+        // A click on the dimmed area next to the card closes the dialog, as Esc does (press and release both outside,
+        // so selecting text inside the card and letting go outside does not close it).
+        var pressedOutside = false;
+        layer.MouseLeftButtonDown += (_, e) => pressedOutside = ReferenceEquals(e.OriginalSource, layer);
+        layer.MouseLeftButtonUp += (_, e) =>
+        {
+            if (pressedOutside && ReferenceEquals(e.OriginalSource, layer)) dialog.Close(null);
+            pressedOutside = false;
+        };
 
         layer.Opacity = 0;
         layer.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(140)));

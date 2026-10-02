@@ -58,7 +58,7 @@ public sealed class PasswordPromptDialog : DialogBase
     private readonly TextBlock? _keyFileText;
     private byte[]? _keyFile;
 
-    public PasswordPromptDialog(string title, string message, bool allowKeyFile = false, bool confirm = false, bool strength = false)
+    public PasswordPromptDialog(string title, string message, bool allowKeyFile = false, bool confirm = false)
     {
         DialogWidth = 440;
         var root = new StackPanel { Margin = new Thickness(26, 24, 26, 22) };
@@ -67,12 +67,6 @@ public sealed class PasswordPromptDialog : DialogBase
         _password.Placeholder = Loc.T("Common.Password");
         _password.EnterPressed += (_, _) => Submit();
         root.Children.Add(_password);
-        if (strength)
-        {
-            var meter = new Controls.StrengthMeter { Margin = new Thickness(0, 8, 0, 0) };
-            root.Children.Add(meter);
-            _password.ValueChanged += (_, _) => meter.Password = _password.Value;
-        }
         if (confirm)
         {
             _confirm = new Controls.SecretBox { Placeholder = Loc.T("Common.PasswordRepeat"), Margin = new Thickness(0, 10, 0, 0) };

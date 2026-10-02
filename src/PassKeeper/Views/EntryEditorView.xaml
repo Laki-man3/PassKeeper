@@ -38,12 +38,12 @@
                 <!-- section: site / VPN and remote access / program / other -->
                 <TextBlock Style="{StaticResource Text.Label}" Text="{l:T Editor.Section}" />
                 <Border Style="{StaticResource SegmentHost}" HorizontalAlignment="Left" Margin="0,0,0,16">
-                    <StackPanel Orientation="Horizontal">
+                    <WrapPanel>
                         <RadioButton x:Name="CatWeb" Style="{StaticResource Segment}" GroupName="EditorCategory" Checked="Category_Checked" Content="{l:T Category.Web}" />
                         <RadioButton x:Name="CatRemote" Style="{StaticResource Segment}" GroupName="EditorCategory" Checked="Category_Checked" Content="{l:T Category.Remote}" />
                         <RadioButton x:Name="CatApp" Style="{StaticResource Segment}" GroupName="EditorCategory" Checked="Category_Checked" Content="{l:T Category.App}" />
                         <RadioButton x:Name="CatOther" Style="{StaticResource Segment}" GroupName="EditorCategory" Checked="Category_Checked" Content="{l:T Category.Other}" />
-                    </StackPanel>
+                    </WrapPanel>
                 </Border>
 
                 <TextBlock Style="{StaticResource Text.Label}" Text="{l:T Field.Title}" />
@@ -53,13 +53,13 @@
                 <StackPanel x:Name="ClientPanel" Margin="0,14,0,0">
                     <TextBlock Style="{StaticResource Text.Label}" Text="{l:T Editor.Client}" />
                     <Border Style="{StaticResource Card}" Padding="14,10">
-                        <Grid>
+                        <Grid c:UI.WrapLastBelow="430">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <Border Width="36" Height="36" CornerRadius="10" Background="{DynamicResource Brush.AccentSoft}">
+                            <Border Width="36" Height="36" CornerRadius="10" Background="{DynamicResource Brush.AccentSoft}" VerticalAlignment="Top">
                                 <TextBlock x:Name="ClientIcon" Style="{StaticResource Icon}" FontSize="16" Foreground="{DynamicResource Brush.AccentText}" Text="&#xE705;" />
                             </Border>
                             <StackPanel Grid.Column="1" Margin="12,0,10,0" VerticalAlignment="Center">
@@ -69,9 +69,16 @@
                             <Button Grid.Column="2" Style="{StaticResource Btn.Secondary}" c:UI.Icon="&#xE721;" Content="{l:T Editor.ChooseClient}" Click="ChooseClient_Click" />
                         </Grid>
                     </Border>
+                    <Button x:Name="WindowsToggle" Style="{StaticResource Btn.Link}" HorizontalAlignment="Left" Margin="-8,4,0,0" c:UI.Icon="&#xE70F;"
+                            Content="{l:T Editor.EditWindows}" Click="WindowsToggle_Click" />
+                    <StackPanel x:Name="WindowsPanel" Visibility="Collapsed">
+                        <TextBlock Style="{StaticResource Text.Label}" Margin="0,6,0,6" Text="{l:T Field.Windows}" />
+                        <TextBox x:Name="WindowsBox" Style="{StaticResource TextBox.Multiline}" MinHeight="64" c:UI.Placeholder="{l:T Editor.WindowsPlaceholder}" TextChanged="Windows_Changed" />
+                        <TextBlock Style="{StaticResource Text.Muted}" Margin="0,6,0,0" TextWrapping="Wrap" Text="{l:T Editor.WindowsHelp}" />
+                    </StackPanel>
                 </StackPanel>
 
-                <Grid Margin="0,14,0,0">
+                <Grid Margin="0,14,0,0" c:UI.StackBelow="430">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition />
                         <ColumnDefinition Width="14" />
@@ -92,14 +99,13 @@
                             <Button Grid.Column="1" Style="{StaticResource Btn.Secondary}" Width="38" Height="38" Padding="0" Margin="6,0,0,0"
                                     c:UI.Icon="&#xE8D7;" ToolTip="{l:T Editor.Generate}" Click="Generate_Click" />
                         </Grid>
-                        <c:StrengthMeter Margin="0,8,0,0" Password="{Binding Value, ElementName=PasswordBox}" />
                     </StackPanel>
                 </Grid>
                 <Button x:Name="TakeButton" Style="{StaticResource Btn.Link}" HorizontalAlignment="Left" Margin="-8,4,0,0" c:UI.Icon="&#xE8C8;"
                         Content="{l:T Editor.TakeFromEntry}" Click="TakeFromEntry_Click" />
 
                 <!-- PIN (token / smart card) and server for sign-in clients -->
-                <Grid x:Name="PinServerRow" Margin="0,10,0,0">
+                <Grid x:Name="PinServerRow" Margin="0,10,0,0" c:UI.StackBelow="430">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition />
                         <ColumnDefinition Width="14" />
@@ -126,9 +132,16 @@
                 <StackPanel x:Name="WebPanel">
                     <TextBlock Style="{StaticResource Text.Label}" Margin="0,14,0,6" Text="{l:T Field.Website}" />
                     <TextBox x:Name="UrlBox" c:UI.Placeholder="https://example.com" TextChanged="Any_Changed" />
+                    <Button x:Name="ExtraUrlsToggle" Style="{StaticResource Btn.Link}" HorizontalAlignment="Left" Margin="-8,4,0,0" c:UI.Icon="&#xE710;"
+                            Content="{l:T Field.ExtraUrls}" Click="ExtraUrlsToggle_Click" />
+                    <StackPanel x:Name="ExtraUrlsPanel" Visibility="Collapsed">
+                        <TextBlock Style="{StaticResource Text.Label}" Margin="0,6,0,6" Text="{l:T Field.ExtraUrls}" />
+                        <TextBox x:Name="ExtraUrlsBox" Style="{StaticResource TextBox.Multiline}" MinHeight="64" c:UI.Placeholder="{l:T Editor.ExtraUrlsPlaceholder}" TextChanged="Any_Changed" />
+                        <TextBlock Style="{StaticResource Text.Muted}" Margin="0,6,0,0" TextWrapping="Wrap" Text="{l:T Editor.ExtraUrlsHelp}" />
+                    </StackPanel>
                 </StackPanel>
 
-                <Grid x:Name="ContactRow" Margin="0,14,0,0">
+                <Grid x:Name="ContactRow" Margin="0,14,0,0" c:UI.StackBelow="430">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition />
                         <ColumnDefinition Width="14" />
@@ -144,7 +157,7 @@
                     </StackPanel>
                 </Grid>
 
-                <Grid Margin="0,14,0,0">
+                <Grid Margin="0,14,0,0" c:UI.StackBelow="430">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition />
                         <ColumnDefinition Width="14" />
@@ -192,19 +205,6 @@
 
                         <StackPanel x:Name="AdvancedPanel" Visibility="Collapsed">
                             <TextBlock Style="{StaticResource Text.Secondary}" FontSize="12.5" Margin="0,8,0,0" TextWrapping="Wrap" Text="{l:T Editor.HowItWorks}" />
-
-                            <Grid Margin="0,16,0,6">
-                                <TextBlock Style="{StaticResource Text.Label}" Text="{l:T Field.Windows}" VerticalAlignment="Center" Margin="0" />
-                                <Button Style="{StaticResource Btn.Link}" HorizontalAlignment="Right" Margin="0,-6,-8,-6" Content="{l:T Editor.ChooseClient}" Click="ChooseClient_Click" />
-                            </Grid>
-                            <TextBox x:Name="WindowsBox" Style="{StaticResource TextBox.Multiline}" MinHeight="64" c:UI.Placeholder="{l:T Editor.WindowsPlaceholder}" TextChanged="Windows_Changed" />
-                            <TextBlock Style="{StaticResource Text.Muted}" Margin="0,6,0,0" TextWrapping="Wrap" Text="{l:T Editor.WindowsHelp}" />
-
-                            <StackPanel x:Name="ExtraUrlsPanel">
-                                <TextBlock Style="{StaticResource Text.Label}" Margin="0,16,0,6" Text="{l:T Field.ExtraUrls}" />
-                                <TextBox x:Name="ExtraUrlsBox" Style="{StaticResource TextBox.Multiline}" MinHeight="64" c:UI.Placeholder="{l:T Editor.ExtraUrlsPlaceholder}" TextChanged="Any_Changed" />
-                                <TextBlock Style="{StaticResource Text.Muted}" Margin="0,6,0,0" TextWrapping="Wrap" Text="{l:T Editor.ExtraUrlsHelp}" />
-                            </StackPanel>
 
                             <TextBlock Style="{StaticResource Text.Label}" Margin="0,16,0,6" Text="{l:T Field.Sequence}" />
                             <TextBox x:Name="SequenceBox" FontFamily="{StaticResource Font.Mono}" c:UI.Placeholder="{l:T Editor.SequencePlaceholder}" TextChanged="Any_Changed" />

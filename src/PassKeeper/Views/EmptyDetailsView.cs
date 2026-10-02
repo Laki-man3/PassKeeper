@@ -1,6 +1,5 @@
 using System.Windows;
 using System.Windows.Controls;
-using PassKeeper.Core.Security;
 using PassKeeper.Localization;
 
 namespace PassKeeper.Views;
@@ -11,7 +10,6 @@ public sealed class EmptyDetailsView : UserControl
     public EmptyDetailsView()
     {
         var entries = App.Instance.Vault.ActiveEntries.Where(e => e.Password.Length > 0).ToList();
-        var weak = entries.Count(e => PasswordStrength.Evaluate(e.Password).Score <= 1);
         var reused = entries.GroupBy(e => e.Password).Where(g => g.Count() > 1).Sum(g => g.Count());
 
         var root = new StackPanel { VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center, MaxWidth = 460, Margin = new Thickness(32, 40, 32, 32) };
@@ -27,10 +25,9 @@ public sealed class EmptyDetailsView : UserControl
         root.Children.Add(new TextBlock { Text = Loc.T("Details.EmptyHint"), Style = (Style)FindResource("Text.Muted"), TextAlignment = TextAlignment.Center, FontSize = 13 });
 
         var stats = new Grid { Margin = new Thickness(0, 26, 0, 0) };
-        for (var i = 0; i < 3; i++) stats.ColumnDefinitions.Add(new ColumnDefinition());
-        AddStat(stats, 0, entries.Count.ToString(), Loc.T("Details.StatTotal"), "Brush.Text");
-        AddStat(stats, 1, weak.ToString(), Loc.T("Details.StatWeak"), weak > 0 ? "Brush.Warning" : "Brush.Success");
-        AddStat(stats, 2, reused.ToString(), Loc.T("Details.StatReused"), reused > 0 ? "Brush.Warning" : "Brush.Success");
+        for (var i = 0; i < 2; i++) stats.ColumnDefinitions.Add(new ColumnDefinition());
+        AddStat(stats, 0, entries.Count.ToString(), Loc.T("Details.StatTotal"));
+        AddStat(stats, 1, reused.ToString(), Loc.T("Details.StatReused"));
         root.Children.Add(stats);
 
         var tip = new Border { Style = (Style)FindResource("Card"), Margin = new Thickness(0, 14, 0, 0), Padding = new Thickness(14, 12, 14, 12) };
@@ -49,12 +46,12 @@ public sealed class EmptyDetailsView : UserControl
         Content = new ScrollViewer { Content = root, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
     }
 
-    private void AddStat(Grid grid, int column, string value, string label, string brush)
+    private void AddStat(Grid grid, int column, string value, string label)
     {
-        var card = new Border { Style = (Style)FindResource("Card"), Margin = new Thickness(column == 0 ? 0 : 5, 0, column == 2 ? 0 : 5, 0), Padding = new Thickness(12, 12, 12, 12) };
+        var card = new Border { Style = (Style)FindResource("Card"), Margin = new Thickness(column == 0 ? 0 : 5, 0, column == 0 ? 5 : 0, 0), Padding = new Thickness(12, 12, 12, 12) };
         var panel = new StackPanel();
         var number = new TextBlock { Text = value, FontSize = 24, FontWeight = FontWeights.SemiBold };
-        number.SetResourceReference(TextBlock.ForegroundProperty, brush);
+        number.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text");
         panel.Children.Add(number);
         panel.Children.Add(new TextBlock { Text = label, Style = (Style)FindResource("Text.Muted"), Margin = new Thickness(0, 2, 0, 0) });
         card.Child = panel;

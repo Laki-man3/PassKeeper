@@ -22,7 +22,7 @@ public sealed class AppSettings
     public int ClipboardClearSeconds { get; set; } = 30;
     public string AutoTypeHotkey { get; set; } = "Ctrl+Alt+A";
     public bool SmartSuggestions { get; set; } = true;
-    /// <summary>Fill a site's login form by itself when exactly one entry matches the site.</summary>
+    /// <summary>Fill a sign-in form (site or program) by itself when exactly one entry clearly belongs to it.</summary>
     public bool AutoFillWeb { get; set; } = true;
     /// <summary>Sign in automatically to clients whose entries have auto sign-in enabled.</summary>
     public bool AutoLogin { get; set; } = true;

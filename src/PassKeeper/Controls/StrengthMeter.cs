@@ -40,12 +40,6 @@ public sealed class StrengthMeter : StackPanel
         set => SetValue(PasswordProperty, value);
     }
 
-    public bool ShowCaption
-    {
-        get => _caption.Visibility == Visibility.Visible;
-        set => _caption.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
-    }
-
     private void Update()
     {
         var pw = Password ?? "";

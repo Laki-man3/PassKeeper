@@ -93,6 +93,20 @@ internal static class DevScreens
         await Snap(main, dir, $"05-vault-details-{suffix}");
         list.SelectedItem = list.Items.Cast<ViewModels.EntryItem>().First(i => i.Entry.EffectiveCategory == EntryCategory.Remote && i.Entry.AutoLogin);
         await Snap(main, dir, $"05b-vault-vpn-{suffix}");
+
+        // A small window with the panes pulled wide: the list and the sections give way, nothing is pushed out.
+        var settings = app.Settings;
+        var (sidebarWidth, listWidth) = (settings.SidebarWidth, settings.ListWidth);
+        settings.SidebarWidth = 420;
+        settings.ListWidth = 760;
+        main.Width = 940;
+        await Snap(main, dir, $"05c-vault-narrow-{suffix}");
+        var narrowEditor = new EntryEditorView(((ViewModels.EntryItem)list.SelectedItem).Entry.Clone(), false, app.Vault.Folders());
+        ((System.Windows.Controls.ContentControl)vault.FindName("DetailHost")).Content = narrowEditor;
+        await Snap(main, dir, $"06e-editor-narrow-{suffix}");
+        settings.SidebarWidth = sidebarWidth;
+        settings.ListWidth = listWidth;
+        main.Width = 1240;
         list.SelectedIndex = 1;
 
         var details = (System.Windows.Controls.ContentControl)vault.FindName("DetailHost");
@@ -118,6 +132,12 @@ internal static class DevScreens
         details.Content = null;
 
         await Dialog(main, new SettingsDialog(), dir, $"07-settings-{suffix}");
+        var about = new SettingsDialog();
+        _ = main.ShowDialogAsync(about);
+        await Task.Delay(300);
+        ((System.Windows.Controls.ScrollViewer)about.FindName("Scroll")).ScrollToEnd();
+        await Snap(main, dir, $"07b-settings-about-{suffix}");
+        about.Close();
         await Dialog(main, new GeneratorDialog(pickMode: false), dir, $"08-generator-{suffix}");
         await Dialog(main, new ImportDialog(), dir, $"09-import-{suffix}");
         await Dialog(main, new ExportDialog(), dir, $"10-export-{suffix}");

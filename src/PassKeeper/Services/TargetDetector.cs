@@ -82,7 +82,9 @@ public static class TargetDetector
                 {
                     bar = root.FindFirst(TreeScope.Descendants, new AndCondition(
                               new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Edit),
-                              new PropertyCondition(AutomationElement.ClassNameProperty, "OmniboxViewViews")))
+                              new OrCondition(
+                                  new PropertyCondition(AutomationElement.ClassNameProperty, "OmniboxViewViews"),
+                                  new PropertyCondition(AutomationElement.ClassNameProperty, "SmartboxEditField"))))
                           ?? root.FindFirst(TreeScope.Descendants,
                               new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Edit));
                 }
@@ -90,6 +92,7 @@ public static class TargetDetector
                     return NormalizeUrl(((ValuePattern)p).Current.Value);
             }
             catch (ElementNotAvailableException) { }
+            catch (TimeoutException) { } // the program does not answer UI Automation in time
             catch (System.Runtime.InteropServices.COMException) { }
             catch (InvalidOperationException) { }
             catch (ArgumentException) { }
@@ -107,7 +110,7 @@ public static class TargetDetector
             var focused = AutomationElement.FocusedElement;
             return focused != null && focused.Current.ProcessId == pid ? focused : null;
         }
-        catch (Exception ex) when (ex is ElementNotAvailableException or System.Runtime.InteropServices.COMException or InvalidOperationException)
+        catch (Exception ex) when (ex is ElementNotAvailableException or TimeoutException or System.Runtime.InteropServices.COMException or InvalidOperationException)
         {
             return null;
         }

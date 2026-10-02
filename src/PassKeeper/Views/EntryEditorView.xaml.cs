@@ -75,7 +75,10 @@ public partial class EntryEditorView : UserControl
             PasswordBox.Value = _generatedPassword = PasswordGenerator.Generate(GeneratorDialog.LastOptions);
         SelectCategory(_category);
         AutoLoginBox.Click += (_, _) => _autoLoginTouched = true;
-        if (entry.AutoTypeSequence.Length > 0 || entry.ExtraUrls.Count > 0) SetAdvanced(true);
+        if (entry.AutoTypeSequence.Length > 0) SetAdvanced(true);
+        ShowExtraUrls(entry.ExtraUrls.Count > 0);
+        // Windows typed in by hand (not a known client) stay in sight.
+        ShowWindowsList(entry.WindowPatterns.Count > 0 && KnownApps.ForPatterns(entry.WindowPatterns) == null);
         UpdateClientCard();
 
         _originalSnapshot = Snapshot();
@@ -160,7 +163,6 @@ public partial class EntryEditorView : UserControl
         Show(WebPanel, _category == EntryCategory.Web);
         Show(ContactRow, _category is EntryCategory.Web or EntryCategory.Other);
         Show(KeyPanel, _category != EntryCategory.Remote);
-        Show(ExtraUrlsPanel, _category == EntryCategory.Web);
         UpdateAdvancedSummary();
 
         static void Show(UIElement element, bool visible) => element.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
@@ -191,6 +193,31 @@ public partial class EntryEditorView : UserControl
         if (_isNew && !_autoLoginTouched) AutoLoginBox.IsChecked = client.Category == EntryCategory.Remote;
         if (client.App?.UsesPin == true) PinBox.Placeholder = Loc.T("Editor.PinRequired");
         UpdateClientCard();
+    }
+
+    /// <summary>The window list is set by "Choose…"; it is opened for editing by hand only when asked (or when it is not a known client's).</summary>
+    private void WindowsToggle_Click(object sender, RoutedEventArgs e)
+    {
+        ShowWindowsList(true);
+        Dispatcher.BeginInvoke(() => WindowsBox.Focus(), System.Windows.Threading.DispatcherPriority.Input);
+    }
+
+    private void ShowWindowsList(bool show)
+    {
+        WindowsPanel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        WindowsToggle.Visibility = show ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private void ExtraUrlsToggle_Click(object sender, RoutedEventArgs e)
+    {
+        ShowExtraUrls(true);
+        Dispatcher.BeginInvoke(() => ExtraUrlsBox.Focus(), System.Windows.Threading.DispatcherPriority.Input);
+    }
+
+    private void ShowExtraUrls(bool show)
+    {
+        ExtraUrlsPanel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        ExtraUrlsToggle.Visibility = show ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void Windows_Changed(object sender, TextChangedEventArgs e)
@@ -261,14 +288,8 @@ public partial class EntryEditorView : UserControl
     private void UpdateAdvancedSummary()
     {
         if (AdvancedSummary == null) return;
-        var windows = Lines(WindowsBox.Text).Count;
         var sequence = SequenceBox.Text.Trim();
-        var parts = new List<string>
-        {
-            sequence.Length > 0 ? Loc.F("Editor.SummarySequence", sequence) : Loc.T("Editor.SummaryFields"),
-        };
-        if (windows > 0) parts.Add(Loc.F("Editor.SummaryWindows", windows));
-        AdvancedSummary.Text = string.Join(" · ", parts);
+        AdvancedSummary.Text = sequence.Length > 0 ? Loc.F("Editor.SummarySequence", sequence) : Loc.T("Editor.SummaryFields");
     }
 
     private void BuildChips()

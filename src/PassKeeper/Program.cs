@@ -13,8 +13,6 @@ public sealed class StartupOptions
     public string? ScreenshotsDirectory { get; private init; }
     /// <summary>"--lang ru|en" limits the screenshots to one language.</summary>
     public string? ScreenshotsLanguage { get; private init; }
-    public string? SelfTestReport { get; private init; }
-    public string? SelfTestBrowser { get; private init; }
 
     public static StartupOptions Parse(string[] args)
     {
@@ -32,8 +30,6 @@ public sealed class StartupOptions
             DataDirectory = Value("--data"),
             ScreenshotsDirectory = Value("--screenshots"),
             ScreenshotsLanguage = Value("--lang"),
-            SelfTestReport = Value("--selftest"),
-            SelfTestBrowser = Value("--browser"),
         };
     }
 }
@@ -46,7 +42,7 @@ public static class Program
         var options = StartupOptions.Parse(args);
         if (options.Uninstall) return StartUninstaller(options.Quiet);
         SingleInstance? instance = null;
-        if (options.ScreenshotsDirectory == null && options.SelfTestReport == null)
+        if (options.ScreenshotsDirectory == null)
         {
             instance = SingleInstance.TryAcquire(options.DataDirectory);
             if (instance == null)

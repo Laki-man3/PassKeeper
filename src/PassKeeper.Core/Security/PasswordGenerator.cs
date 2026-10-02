@@ -51,11 +51,4 @@ public static class PasswordGenerator
         }
         return new string(chars);
     }
-
-    public static string GeneratePin(int digits = 6)
-    {
-        var sb = new StringBuilder(digits);
-        for (var i = 0; i < digits; i++) sb.Append((char)('0' + RandomNumberGenerator.GetInt32(10)));
-        return sb.ToString();
-    }
 }

@@ -13,16 +13,16 @@ internal static class Native
     public const long WS_EX_NOACTIVATE = 0x08000000;
     public const long WS_EX_TOPMOST = 0x00000008;
     public const int SW_RESTORE = 9;
-    public const int SW_SHOW = 5;
     public const uint SWP_NOSIZE = 0x0001;
     public const uint SWP_NOMOVE = 0x0002;
-    public const uint SWP_NOACTIVATE = 0x0010;
-    public const uint SWP_SHOWWINDOW = 0x0040;
-    public static readonly IntPtr HWND_TOPMOST = new(-1);
 
     public const uint MOD_ALT = 0x1, MOD_CONTROL = 0x2, MOD_SHIFT = 0x4, MOD_WIN = 0x8, MOD_NOREPEAT = 0x4000;
 
+    public const uint INPUT_MOUSE = 0;
     public const uint INPUT_KEYBOARD = 1;
+    public const uint MOUSEEVENTF_LEFTDOWN = 0x0002, MOUSEEVENTF_LEFTUP = 0x0004;
+    public const uint SWP_ASYNCWINDOWPOS = 0x4000;
+    public static readonly IntPtr HWND_TOP = IntPtr.Zero;
     public const uint KEYEVENTF_EXTENDEDKEY = 0x1, KEYEVENTF_KEYUP = 0x2, KEYEVENTF_UNICODE = 0x4, KEYEVENTF_SCANCODE = 0x8;
 
     [StructLayout(LayoutKind.Sequential)]
@@ -82,11 +82,29 @@ internal static class Native
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
-    public static extern bool BringWindowToTop(IntPtr hWnd);
+    public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
-    public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    public static extern bool IsHungAppWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool IsWindowVisible(IntPtr hWnd);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct POINT
+    {
+        public int X, Y;
+    }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetCursorPos(out POINT point);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetCursorPos(int x, int y);
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -263,27 +281,45 @@ internal static class Native
         SetWindowLongPtr(hwnd, GWL_EXSTYLE, new IntPtr(ex | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST));
     }
 
-    /// <summary>Brings a window to the foreground even when Windows' foreground lock would refuse it.</summary>
+    /// <summary>
+    /// Brings a window to the foreground even when Windows' foreground lock would refuse it. Nothing here waits for
+    /// the other program: a window that does not respond is left alone, and the window is raised asynchronously.
+    /// </summary>
     public static bool ForceForeground(IntPtr hwnd)
     {
-        if (hwnd == IntPtr.Zero || !IsWindow(hwnd)) return false;
-        if (IsIconic(hwnd)) ShowWindow(hwnd, SW_RESTORE);
+        if (hwnd == IntPtr.Zero || !IsWindow(hwnd) || IsHungAppWindow(hwnd)) return false;
+        if (IsIconic(hwnd)) ShowWindowAsync(hwnd, SW_RESTORE);
         if (GetForegroundWindow() == hwnd) return true;
         if (SetForegroundWindow(hwnd)) return true;
 
         var fg = GetForegroundWindow();
+        if (fg != IntPtr.Zero && IsHungAppWindow(fg)) return false;
         var fgThread = GetWindowThreadProcessId(fg, out _);
         var current = GetCurrentThreadId();
-        if (fgThread != current) AttachThreadInput(current, fgThread, true);
+        var attached = fgThread != 0 && fgThread != current && AttachThreadInput(current, fgThread, true);
         try
         {
-            BringWindowToTop(hwnd);
-            ShowWindow(hwnd, SW_SHOW);
+            SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_ASYNCWINDOWPOS);
             return SetForegroundWindow(hwnd);
         }
         finally
         {
-            if (fgThread != current) AttachThreadInput(current, fgThread, false);
+            if (attached) AttachThreadInput(current, fgThread, false);
         }
+    }
+
+    /// <summary>A left click at a screen point; the mouse pointer goes back to where it was.</summary>
+    public static void Click(int x, int y)
+    {
+        GetCursorPos(out var old);
+        SetCursorPos(x, y);
+        var size = Marshal.SizeOf<INPUT>();
+        SendInput(2,
+        [
+            new INPUT { type = INPUT_MOUSE, U = new InputUnion { mi = new MOUSEINPUT { dwFlags = MOUSEEVENTF_LEFTDOWN } } },
+            new INPUT { type = INPUT_MOUSE, U = new InputUnion { mi = new MOUSEINPUT { dwFlags = MOUSEEVENTF_LEFTUP } } },
+        ], size);
+        Thread.Sleep(30);
+        SetCursorPos(old.X, old.Y);
     }
 }

@@ -134,6 +134,4 @@ public static class TextDecoding
             return Encoding.GetEncoding(1251).GetString(bytes);
         }
     }
-
-    public static string ReadFile(string path) => Decode(File.ReadAllBytes(path));
 }

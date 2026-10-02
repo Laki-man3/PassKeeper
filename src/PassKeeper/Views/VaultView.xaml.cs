@@ -26,8 +26,8 @@ public partial class VaultView : UserControl
     {
         InitializeComponent();
         NavList.ItemsSource = _nav;
-        SidebarColumn.Width = new GridLength(Math.Clamp(App.Instance.Settings.SidebarWidth, SidebarColumn.MinWidth, SidebarColumn.MaxWidth));
-        ListColumn.Width = new GridLength(Math.Clamp(App.Instance.Settings.ListWidth, ListColumn.MinWidth, ListColumn.MaxWidth));
+        SidebarColumn.Width = new GridLength(Math.Clamp(App.Instance.Settings.SidebarWidth, SidebarColumn.MinWidth, SidebarMax));
+        ListColumn.Width = new GridLength(Math.Clamp(App.Instance.Settings.ListWidth, ListColumn.MinWidth, ListMax));
         _sort = App.Instance.Settings.SortOrder;
         BuildSortBox();
         UpdateUser();
@@ -613,6 +613,51 @@ public partial class VaultView : UserControl
         App.Instance.Settings.SidebarWidth = Math.Round(SidebarColumn.ActualWidth);
         App.Instance.Settings.ListWidth = Math.Round(ListColumn.ActualWidth);
         App.Instance.Settings.Save();
+        FitColumns();
+    }
+
+    private const double SidebarMax = 420, ListMax = 760;
+
+    private void Columns_SizeChanged(object sender, SizeChangedEventArgs e) => FitColumns();
+
+    /// <summary>
+    /// The panes keep the widths the user gave them as long as the window allows; in a smaller window the list and
+    /// then the sections pane give way (the details keep their minimum), and they grow back with the window. The
+    /// borders cannot be dragged so far that a pane would be pushed out.
+    /// </summary>
+    private void FitColumns()
+    {
+        var total = Columns.ActualWidth;
+        if (total <= 0) return;
+        var room = total - DetailsColumn.MinWidth;
+        var sidebar = Math.Clamp(App.Instance.Settings.SidebarWidth, SidebarColumn.MinWidth, SidebarMax);
+        var list = Math.Clamp(App.Instance.Settings.ListWidth, ListColumn.MinWidth, ListMax);
+        var over = sidebar + list - room;
+        if (over > 0)
+        {
+            var cut = Math.Min(over, list - ListColumn.MinWidth);
+            list -= cut;
+            over -= cut;
+            sidebar -= Math.Min(over, sidebar - SidebarColumn.MinWidth);
+        }
+        SidebarColumn.Width = new GridLength(sidebar);
+        ListColumn.Width = new GridLength(list);
+        SidebarColumn.MaxWidth = Math.Max(SidebarColumn.MinWidth, Math.Min(SidebarMax, room - list));
+        ListColumn.MaxWidth = Math.Max(ListColumn.MinWidth, Math.Min(ListMax, room - sidebar));
+    }
+
+    /// <summary>A narrow list puts the sorting under its title instead of squeezing the title away.</summary>
+    private void ListHeader_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        var narrow = ListHeader.ActualWidth < 300;
+        foreach (var element in new FrameworkElement[] { SortBox, EmptyTrashButton })
+        {
+            Grid.SetRow(element, narrow ? 1 : 0);
+            Grid.SetColumn(element, narrow ? 0 : 2);
+            Grid.SetColumnSpan(element, narrow ? 3 : 1);
+            element.HorizontalAlignment = narrow ? HorizontalAlignment.Left : HorizontalAlignment.Stretch;
+            element.Margin = new Thickness(0, narrow ? 8 : 0, 0, 0);
+        }
     }
 
     private async void Help_Click(object sender, RoutedEventArgs e) => await HelpDialog.ShowAsync();
