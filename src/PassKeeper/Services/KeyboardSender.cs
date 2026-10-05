@@ -25,6 +25,9 @@ public sealed class KeyboardSender
     /// <summary>When set, typing stops as soon as another window becomes active.</summary>
     public IntPtr TargetWindow { get; set; }
 
+    /// <summary>Checked before every key: typing stops as soon as it fails (the cursor left the field being typed into).</summary>
+    public Func<bool>? Guard { get; set; }
+
     public void Execute(IEnumerable<AutoTypeAction> actions, CancellationToken ct = default)
     {
         foreach (var action in actions)
@@ -125,6 +128,7 @@ public sealed class KeyboardSender
     private void CheckTarget()
     {
         if (TargetWindow != IntPtr.Zero && GetForegroundWindow() != TargetWindow) throw new AutoTypeAbortedException();
+        if (Guard != null && !Guard()) throw new AutoTypeAbortedException();
     }
 
     private void Pause()

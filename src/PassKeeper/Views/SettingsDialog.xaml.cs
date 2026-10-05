@@ -50,6 +50,7 @@ public partial class SettingsDialog : DialogBase
         Suggestions.IsChecked = Settings.SmartSuggestions;
         AutoLogin.IsChecked = Settings.AutoLogin;
         AutoFillWeb.IsChecked = Settings.AutoFillWeb;
+        AutoFillLogBox.IsChecked = Settings.AutoFillLog;
         Submit.IsChecked = Settings.SubmitAfterFill;
         Compatible.IsChecked = Settings.CompatibleTyping;
         DataPath.Text = App.Instance.Vault.DataDirectory;
@@ -194,6 +195,7 @@ public partial class SettingsDialog : DialogBase
         Settings.SmartSuggestions = Suggestions.IsChecked == true;
         Settings.AutoLogin = AutoLogin.IsChecked == true;
         Settings.AutoFillWeb = AutoFillWeb.IsChecked == true;
+        Settings.AutoFillLog = AutoFillLogBox.IsChecked == true;
         Settings.SubmitAfterFill = Submit.IsChecked == true;
         Settings.CompatibleTyping = Compatible.IsChecked == true;
         Settings.AutoLockSeconds = (int)AutoLock.EffectiveValue.TotalSeconds;
@@ -201,6 +203,24 @@ public partial class SettingsDialog : DialogBase
         if (KeyDelay.SelectedItem is ComboBoxItem { Tag: int delay }) Settings.KeystrokeDelayMs = delay;
         Settings.Save();
         App.Instance.OnSettingsChanged();
+    }
+
+    private void OpenAutoFillLog_Click(object sender, RoutedEventArgs e)
+    {
+        var path = AutoFillLog.FilePath;
+        if (!File.Exists(path))
+        {
+            App.Instance.Main.ShowToast(Loc.T("Settings.AutoFillLogEmpty"));
+            return;
+        }
+        try
+        {
+            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            App.Instance.Main.ShowToast(Loc.F("Common.ErrorFormat", ex.Message), error: true);
+        }
     }
 
     // ---- hotkey capture ----------------------------------------------------------------------------------------

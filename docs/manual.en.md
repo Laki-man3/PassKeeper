@@ -91,7 +91,8 @@ The key button next to the password or **Password generator** in the left pane: 
 |---|---|
 | One entry is saved for the page address | it is filled in, even if the domain has other entries (the company's other services on `*.corp.local` do not interfere) |
 | Only one entry of the domain matches | it is filled in |
-| Two or more entries for this address, or only several entries of the domain | nothing is typed: a list appears next to the login field, the entry used last on top; the chosen entry remembers the address and is filled in by itself next time |
+| Two or more entries for this address, or only several entries of the domain | nothing is typed: a list appears next to the login field, the entry used last on top |
+| You chose an entry in the list | it becomes the account for this site and is filled in by itself next time, even if other accounts are saved for the site |
 | No entry | the password field offers **Choose an entry…**: any entry will do, and with **Remember the choice** ticked the address is added to it |
 
 **Suggestion.** When the cursor enters a login, password, e-mail, phone, one-time code or key field, a PassKeeper suggestion with matching entries appears next to it. Clicking an entry fills the field; for a login or password field both are filled. If you went to another page or window, the suggestion closes and types nothing.
@@ -99,6 +100,9 @@ The key button next to the password or **Password generator** in the left pane: 
 **Browsers.** Chrome, Edge, Firefox, Yandex Browser and other Chromium- and Firefox-based browsers. Yandex Browser does not report which field has the cursor: PassKeeper watches its pages itself and puts the cursor into fields with a click.
 
 - An entry matches when the page address is the entry's address or one of its **Other addresses of this site**; entries of other subdomains of the same company match more weakly.
+- A site is its name (`sso.example.com`), not the full link: a sign-in page with a fresh one-time link on every sign-in (single sign-on, Keycloak) is the same site. PassKeeper also notices such a page by its changed address when the title stays the same.
+- A site is filled in by itself at most twice in 3 minutes: a page that comes back with a new link after a failed sign-in is not filled over and over.
+- The entry card shows where the entry is filled in by itself (**Filled in by itself on**); to undo, use the **…** menu → **Do not fill in automatically**.
 - While the vault is locked the suggestion offers to unlock it with the PIN.
 - Suggestions are turned off in **Settings → Autofill → Suggestions at login fields**.
 
@@ -258,7 +262,7 @@ On every save the previous vault is kept as `vault.pkv.bak`, and once a day a co
 |---|---|
 | General | language, appearance (dark, light, as Windows), start with Windows, minimize to tray |
 | Security | auto-lock, clipboard clearing, lock with Windows, change master password and PIN |
-| Autofill | hotkey, suggestions at fields, automatic filling of sign-in forms, automatic sign-in, Enter after filling, compatibility typing mode, delay between keystrokes |
+| Autofill | hotkey, suggestions at fields, automatic filling of sign-in forms, autofill log, automatic sign-in, Enter after filling, compatibility typing mode, delay between keystrokes |
 | Profile | sign out, delete the user |
 | Data | vault folder, backup |
 | About | version, installation mode, uninstall, the author's contacts for remarks and suggestions (Telegram, e-mail, GitHub) |
@@ -302,7 +306,7 @@ Uninstall.exe /S
 
 **No suggestion in a program.** Check that the client is chosen (**Client or program**) and suggestions are on. If the program's fields are not recognised, press Ctrl+Alt+A in the login field or set a custom typing order.
 
-**A site is not filled in by itself.** Check that the entry has the address of this very sign-in page (for single sign-on such as Keycloak, the sign-in page's address, not the portal's), or choose the entry in the list at the field: the address is remembered. With several entries and none saved for this address PassKeeper does not guess but shows the list. Ctrl+Alt+A always works.
+**A site is not filled in by itself.** Choose the entry in the list at the field once: from then on it is filled in by itself. If there is no list, turn on **Settings → Autofill → Autofill log**, open the sign-in page again and look at the log (**Open the log**): it shows which page and fields PassKeeper found, which entries matched and why the form was not filled. Logins, passwords and full addresses are never written to it. Ctrl+Alt+A always works.
 
 **Text goes to the wrong place or is cut.** Increase **Delay between keystrokes** or turn on **Compatibility typing mode**; `{DELAY 500}` can be added to a sequence.
 

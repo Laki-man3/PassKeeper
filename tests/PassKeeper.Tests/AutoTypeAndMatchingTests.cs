@@ -32,6 +32,21 @@ public class AutoTypeAndMatchingTests
     }
 
     [Fact]
+    public void Obvious_ChosenAccountAmongDuplicates()
+    {
+        // Two accounts saved for one sign-in page (e.g. imported twice): the one the user chose is filled in next time,
+        // whatever the address of the page this time (a fresh one-time link on every sign-in).
+        var first = new VaultEntry { Title = "A", Url = "https://sso.corp.local/auth?state=1" };
+        var second = new VaultEntry { Title = "B", Url = "https://sso.corp.local/auth?state=2", AutoFillHosts = ["sso.corp.local"] };
+        var page = new TargetContext { Url = "https://sso.corp.local/auth/realms/x/protocol/openid-connect/auth?state=9f3c&code_challenge=Zx", IsBrowser = true };
+        var matches = EntryMatcher.Match([first, second], page);
+        Assert.Equal(MatchScore.Chosen, matches[0].Score);
+        Assert.Equal(second, EntryMatcher.Obvious(matches, site: true));
+        // Without a choice the user is asked.
+        Assert.Null(EntryMatcher.Obvious(EntryMatcher.Match([first, new VaultEntry { Url = "https://sso.corp.local" }], page), site: true));
+    }
+
+    [Fact]
     public void Obvious_ProgramNeedsItsWindows()
     {
         var vpn = new VaultEntry { Title = "VPN", WindowPatterns = ["csc_ui.exe"] };

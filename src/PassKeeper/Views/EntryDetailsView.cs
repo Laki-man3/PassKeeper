@@ -60,6 +60,8 @@ public sealed class EntryDetailsView : UserControl
         if (entry.StoredPin().Length > 0) fields.Children.Add(SecretRow(Loc.T("Editor.Pin"), entry.StoredPin(), "\uE928"));
         var urlLabel = Loc.T(entry.EffectiveCategory == EntryCategory.Remote ? "Editor.Server" : "Field.Website");
         foreach (var url in entry.AllUrls()) fields.Children.Add(Row(urlLabel, url, "\uE774", isLink: true));
+        if (entry.AutoFillHosts.Count > 0)
+            fields.Children.Add(Row(Loc.T("Details.ChosenFor"), string.Join("\n", entry.AutoFillHosts), "\uE73E", copy: false));
         if (entry.Email.Length > 0) fields.Children.Add(Row(Loc.T("Field.Email"), entry.Email, "\uE715"));
         if (entry.Phone.Length > 0) fields.Children.Add(Row(Loc.T("Field.Phone"), entry.Phone, "\uE717"));
         if (entry.SecretKey.Length > 0) fields.Children.Add(SecretRow(Loc.T("Field.Key"), entry.SecretKey, "\uE192"));
@@ -200,6 +202,14 @@ public sealed class EntryDetailsView : UserControl
         menu.Items.Add(MenuItem("\uE705", Loc.T("Vault.UseForClient"), () => UseForClientRequested?.Invoke(e)));
         if (e.EffectiveCategory != EntryCategory.Web)
             menu.Items.Add(MenuItem("\uE774", Loc.T("Vault.UseForSite"), () => UseForSiteRequested?.Invoke(e)));
+        if (e.AutoFillHosts.Count > 0)
+            menu.Items.Add(MenuItem("\uE711", Loc.T("Vault.ForgetChoice"), () =>
+            {
+                var copy = e.Clone();
+                copy.AutoFillHosts.Clear();
+                App.Instance.Vault.Upsert(copy);
+                App.Instance.Main.ShowToast(Loc.T("Vault.ChoiceForgotten"));
+            }));
         menu.Items.Add(new Separator());
         menu.Items.Add(MenuItem("\uE74D", Loc.T("Common.Delete"), () => DeleteRequested?.Invoke(e)));
         return menu;

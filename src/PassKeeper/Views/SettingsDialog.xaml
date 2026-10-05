@@ -111,6 +111,14 @@
                                 <TextBlock Style="{StaticResource Text.Muted}" Text="{l:T Settings.AutoFillWebHint}" TextWrapping="Wrap" />
                             </StackPanel>
                         </CheckBox>
+                        <CheckBox x:Name="AutoFillLogBox" Style="{StaticResource Toggle}" Margin="0,0,0,4" Click="Simple_Changed">
+                            <StackPanel>
+                                <TextBlock Text="{l:T Settings.AutoFillLog}" />
+                                <TextBlock Style="{StaticResource Text.Muted}" Text="{l:T Settings.AutoFillLogHint}" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </CheckBox>
+                        <Button Style="{StaticResource Btn.Link}" HorizontalAlignment="Left" Margin="-8,0,0,10" c:UI.Icon="&#xE8A5;"
+                                Content="{l:T Settings.AutoFillLogOpen}" Click="OpenAutoFillLog_Click" />
                         <CheckBox x:Name="AutoLogin" Style="{StaticResource Toggle}" Margin="0,0,0,12" Click="Simple_Changed">
                             <StackPanel>
                                 <TextBlock Text="{l:T Settings.AutoLogin}" />

@@ -24,6 +24,8 @@ public sealed class AppSettings
     public bool SmartSuggestions { get; set; } = true;
     /// <summary>Fill a sign-in form (site or program) by itself when exactly one entry clearly belongs to it.</summary>
     public bool AutoFillWeb { get; set; } = true;
+    /// <summary>Write what autofill saw and decided to autofill.log (no secrets), to find out why a form was not filled.</summary>
+    public bool AutoFillLog { get; set; }
     /// <summary>Sign in automatically to clients whose entries have auto sign-in enabled.</summary>
     public bool AutoLogin { get; set; } = true;
     /// <summary>Known client ids / executable names that have auto sign-in entries (read while the vault is locked).</summary>

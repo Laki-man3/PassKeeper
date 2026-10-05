@@ -76,7 +76,7 @@ public sealed class AutoTypeService
             {
                 var (picked, remember) = await AutoTypePickerWindow.PickAsync(target, matches, _app.Vault.ActiveEntries);
                 entry = picked;
-                if (entry != null && remember) entry = Associate(entry, target);
+                if (entry != null && remember) entry = RememberChoice(entry, target);
             }
 
             if (entry == null)
@@ -174,6 +174,28 @@ public sealed class AutoTypeService
     }
 
     /// <summary>
+    /// The user chose an entry for a site or program: it is linked to it (the address or window is added when missing)
+    /// and, on a site, becomes the account filled in there without asking from now on; other entries give that site up.
+    /// The site is its host name, so a sign-in page with a fresh one-time link every time is still the same site.
+    /// </summary>
+    public VaultEntry RememberChoice(VaultEntry entry, TargetWindow target)
+    {
+        entry = Associate(entry, target);
+        if (!target.IsBrowser || DomainUtil.GetHost(target.Url) is not { } host) return entry;
+        foreach (var other in _app.Vault.ActiveEntries.Where(e => e.Id != entry.Id && e.AutoFillHosts.Contains(host, StringComparer.OrdinalIgnoreCase)).ToList())
+        {
+            var copy = other.Clone();
+            copy.AutoFillHosts.RemoveAll(h => h.Equals(host, StringComparison.OrdinalIgnoreCase));
+            _app.Vault.Upsert(copy);
+        }
+        if (entry.AutoFillHosts.Contains(host, StringComparer.OrdinalIgnoreCase)) return entry;
+        var chosen = entry.Clone();
+        chosen.AutoFillHosts.Add(host);
+        _app.Vault.Upsert(chosen);
+        return _app.Vault.Find(chosen.Id) ?? chosen;
+    }
+
+    /// <summary>
     /// Fills a sign-in form by itself: the cursor is in an empty login or password field (or, with
     /// <paramref name="putCursor"/>, is put into it) and one entry clearly belongs to the site or program. A page or
     /// window is filled once in 3 minutes (a failed sign-in that shows the form again is not filled again), and fields
@@ -185,16 +207,36 @@ public sealed class AutoTypeService
         var place = Place(field.Window, target);
         if (place == null) return false;
         foreach (var old in _autoFilled.Where(p => DateTime.UtcNow - p.Value > TimeSpan.FromMinutes(3)).Select(p => p.Key).ToList()) _autoFilled.Remove(old);
-        if (_autoFilled.ContainsKey(place) || !_autoFilling.Add(place)) return false;
+        if (_autoFilled.ContainsKey(place))
+        {
+            AutoFillLog.Write("  not filled again: this page was filled a moment ago");
+            return false;
+        }
+        if (!SiteAllowsAutoFill(target))
+        {
+            AutoFillLog.Write("  not filled: the site was filled twice in the last 3 minutes");
+            return false;
+        }
+        if (!_autoFilling.Add(place)) return false;
         try
         {
-            var login = ValueFor(entry, FieldKind.Login);
-            if (!await Task.Run(() => IsUntouched(field, login))) return false;
+            if (!await Task.Run(() => IsUntouched(field, entry)))
+            {
+                AutoFillLog.Write("  not filled: the form already holds something typed");
+                return false;
+            }
             // The page may still be moving the cursor, or the user may start typing: check again after a moment.
             await Task.Delay(250);
             if (IsTyping) return false;
-            if (!await Task.Run(() => (putCursor ? PutCursorInto(field) : IsFocused(field)) && IsUntouched(field, login))) return false;
+            if (!await Task.Run(() => putCursor ? PutCursorInto(field) : IsFocused(field)))
+            {
+                AutoFillLog.Write(putCursor ? "  not filled: the cursor could not be put into the field (covered or window not in front)" : "  not filled: the cursor left the field");
+                return false;
+            }
+            if (!await Task.Run(() => IsUntouched(field, entry))) return false;
             _autoFilled[place] = DateTime.UtcNow;
+            RecordSiteAutoFill(target);
+            AutoFillLog.Write($"  filled in by itself: \"{entry.Title}\"");
             await FillFieldAsync(entry, field, _app.Settings.SubmitAfterFill);
             return true;
         }
@@ -202,6 +244,28 @@ public sealed class AutoTypeService
         {
             _autoFilling.Remove(place);
         }
+    }
+
+    private readonly Dictionary<string, List<DateTime>> _siteFills = [];
+
+    /// <summary>
+    /// A site is filled by itself at most twice in 3 minutes, whatever its address: sign-in pages with a fresh one-time
+    /// link (and an error page after a wrong password) are not filled over and over.
+    /// </summary>
+    private bool SiteAllowsAutoFill(TargetWindow target)
+    {
+        var site = target.IsBrowser ? DomainUtil.GetHost(target.Url) : target.ProcessName;
+        if (string.IsNullOrEmpty(site) || !_siteFills.TryGetValue(site, out var times)) return true;
+        times.RemoveAll(t => DateTime.UtcNow - t > TimeSpan.FromMinutes(3));
+        return times.Count < 2;
+    }
+
+    private void RecordSiteAutoFill(TargetWindow target)
+    {
+        var site = target.IsBrowser ? DomainUtil.GetHost(target.Url) : target.ProcessName;
+        if (string.IsNullOrEmpty(site)) return;
+        if (!_siteFills.TryGetValue(site, out var times)) _siteFills[site] = times = [];
+        times.Add(DateTime.UtcNow);
     }
 
     /// <summary>A page (window and address) or a program window (window and title): filled at most once in 3 minutes by itself.</summary>
@@ -270,15 +334,39 @@ public sealed class AutoTypeService
         return false;
     }
 
+    /// <summary>
+    /// Types a password into its field, checking before every key that the cursor is still there: if the user clicks
+    /// into the login field meanwhile, typing stops instead of putting the password where it would be visible. Browsers
+    /// that do not report the cursor (Yandex) cannot be checked.
+    /// </summary>
+    private static void TypePassword(KeyboardSender sender, AutomationElement password, IntPtr window, string value)
+    {
+        if (!FieldFinder.FocusStaysOnWindow(window)) sender.Guard = () => FieldFinder.IsFocused(password);
+        try
+        {
+            sender.ClearField();
+            sender.TypeText(value);
+        }
+        finally
+        {
+            sender.Guard = null;
+        }
+    }
+
     /// <summary>The field is empty; for a password field the login before it is empty or already this entry's.</summary>
-    private static bool IsUntouched(LoginField field, string login)
+    /// <summary>
+    /// The form has nothing the user typed: the field is empty or already holds this entry's login (the browser's own
+    /// autofill), and for a password field the login before it is empty or this entry's.
+    /// </summary>
+    private static bool IsUntouched(LoginField field, VaultEntry entry)
     {
         var value = FieldFinder.GetValue(field.Element);
-        if (value == null || value.Length > 0) return false;
-        if (!field.IsPassword) return true;
+        if (value == null) return false;
+        if (!field.IsPassword) return value.Length == 0 || value == ValueFor(entry, field.Kind);
+        if (value.Length > 0) return false;
         var user = FieldFinder.FindUsernameBefore(field.Element);
         var typed = user == null ? "" : FieldFinder.GetValue(user) ?? "";
-        return typed.Length == 0 || typed == login;
+        return typed.Length == 0 || typed == ValueFor(entry, FieldKind.Login);
     }
 
     private static bool IsFocused(LoginField field) => FieldFinder.IsFocused(field.Element);
@@ -461,8 +549,7 @@ public sealed class AutoTypeService
                         FieldFinder.WaitForValue(user, login);
                         if (!MoveTo(field.Element, sender, back: false) || FieldFinder.IsFocused(user)) return;
                     }
-                    sender.ClearField();
-                    sender.TypeText(entry.Password);
+                    TypePassword(sender, field.Element, field.Window, entry.Password);
                 }
                 else
                 {
@@ -477,8 +564,7 @@ public sealed class AutoTypeService
                         // A password is never typed while the cursor is still reported in the login field.
                         if (FieldFinder.IsFocused(field.Element)) return;
                         filled.Add(FieldFinder.Bounds(password));
-                        sender.ClearField();
-                        sender.TypeText(entry.Password);
+                        TypePassword(sender, password, field.Window, entry.Password);
                     }
                 }
                 if (submit) sender.PressKey("ENTER");

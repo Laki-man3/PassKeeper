@@ -27,7 +27,6 @@ public sealed class SuggestionPopup : Window
     private readonly DispatcherTimer _autoHide = new() { Interval = TimeSpan.FromSeconds(20) };
     private LoginField? _field;
     private TargetWindow? _target;
-    private HashSet<Guid> _exact = [];
 
     public SuggestionPopup()
     {
@@ -82,8 +81,8 @@ public sealed class SuggestionPopup : Window
         };
     }
 
-    /// <summary>An entry was clicked: the entry, its field, the site or window, and whether it was saved for exactly this address.</summary>
-    public event Action<VaultEntry, LoginField, TargetWindow?, bool>? EntryChosen;
+    /// <summary>An entry was clicked: the entry, its field and the site or window.</summary>
+    public event Action<VaultEntry, LoginField, TargetWindow?>? EntryChosen;
     public event Action<LoginField>? UnlockRequested;
     public event Action<LoginField>? CreateRequested;
     public event Action<LoginField, TargetWindow>? ChooseRequested;
@@ -95,7 +94,6 @@ public sealed class SuggestionPopup : Window
     {
         _field = field;
         _target = target;
-        _exact = matches.Where(m => m.Score >= 100).Select(m => m.Entry.Id).ToHashSet();
         Fill(matches.Select(m => m.Entry).ToList(), target.Describe(), field.Kind);
         Present(field.Bounds);
     }
@@ -238,9 +236,8 @@ public sealed class SuggestionPopup : Window
         {
             var f = _field;
             var target = _target;
-            var exact = _exact.Contains(entry.Id);
             HidePopup();
-            if (f != null) EntryChosen?.Invoke(entry, f, target, exact);
+            if (f != null) EntryChosen?.Invoke(entry, f, target);
         };
         return button;
     }

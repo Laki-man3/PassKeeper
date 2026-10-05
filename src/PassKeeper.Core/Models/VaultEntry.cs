@@ -10,6 +10,10 @@ public sealed class VaultEntry
     public string Password { get; set; } = "";
     public string Url { get; set; } = "";
     public List<string> ExtraUrls { get; set; } = [];
+    /// <summary>
+    /// Sites (host names) where the user chose this entry among several accounts: it is filled in there without asking.
+    /// </summary>
+    public List<string> AutoFillHosts { get; set; } = [];
     public string Email { get; set; } = "";
     public string Phone { get; set; } = "";
     /// <summary>API key, licence key, token or any other secret key.</summary>

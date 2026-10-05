@@ -102,6 +102,7 @@ public partial class App : Application
         _idle = new IdleMonitor { Period = TimeSpan.FromSeconds(Settings.AutoLockSeconds) };
         _idle.Timeout += OnIdleTimeout;
 
+        AutoFillLog.Enabled = Settings.AutoFillLog;
         _watcher = new FocusWatcher();
         _watcher.LoginFieldFocused += OnLoginFieldFocused;
         _watcher.PageShown += OnPageShown;
@@ -370,6 +371,7 @@ public partial class App : Application
 
     public void OnSettingsChanged()
     {
+        AutoFillLog.Enabled = Settings.AutoFillLog;
         if (_idle != null) _idle.Period = TimeSpan.FromSeconds(Settings.AutoLockSeconds);
         if (Settings.SmartSuggestions) _watcher?.Start();
         else
@@ -413,6 +415,7 @@ public partial class App : Application
             }
             var all = EntryMatcher.Match(Vault.ActiveEntries, target.ToContext());
             var matches = all.Where(m => AutoTypeService.CanFill(m.Entry, field.Kind)).ToList();
+            AutoFillLog.Write($"field {field.Kind} in {AutoFillLog.Describe(target)}: {AutoFillLog.Describe(matches)}");
             if (Settings.AutoFillWeb && EntryMatcher.Obvious(matches, target.IsBrowser) is { } entry &&
                 await AutoType.TryAutoFillAsync(entry, field, target))
             {
@@ -429,6 +432,7 @@ public partial class App : Application
             if (matches.Count > 0)
             {
                 // Several accounts: the user chooses (the one used last is on top).
+                AutoFillLog.Write("  list of entries shown at the field");
                 _popup.ShowEntries(field, target, matches);
                 return;
             }
@@ -460,13 +464,18 @@ public partial class App : Application
     {
         if (!Settings.SmartSuggestions || !Settings.AutoFillWeb || IsExiting) return;
         var target = TargetDetector.Capture(page.Window, detectUrl: true, focused: page.Document);
-        if (DomainUtil.GetHost(target.Url) == null) return;
+        if (DomainUtil.GetHost(target.Url) == null)
+        {
+            AutoFillLog.Write($"page in {target.ProcessName}: its address could not be read");
+            return;
+        }
         Dispatcher.BeginInvoke(async () =>
         {
             if (!HasProfile || !Vault.IsUnlocked || IsExiting || AutoType.IsBusy) return;
             var matches = EntryMatcher.Match(Vault.ActiveEntries, target.ToContext())
                 .Where(m => AutoTypeService.CanFill(m.Entry, FieldKind.Login))
                 .ToList();
+            AutoFillLog.Write($"page {AutoFillLog.Describe(target)} (cursor not in a field): {AutoFillLog.Describe(matches)}");
             if (matches.Count == 0) return;
             // A page already examined a moment ago (its title changes, the user comes back to it) is left as it is.
             var key = page.Window + "|" + target.Url;
@@ -480,7 +489,12 @@ public partial class App : Application
                 if (_watcher?.IsCurrent(page.Sequence) != true) return;
                 field = await Task.Run(() => FieldFinder.FindSignInField(page.Document, page.Window));
             }
-            if (field == null || _watcher?.IsCurrent(page.Sequence) != true) return;
+            if (field == null)
+            {
+                AutoFillLog.Write("  no sign-in form found on the page");
+                return;
+            }
+            if (_watcher?.IsCurrent(page.Sequence) != true) return;
             _popup ??= CreatePopup();
             if (EntryMatcher.Obvious(matches, site: true) is { } entry &&
                 await AutoType.TryAutoFillAsync(entry, field, target, putCursor: true))
@@ -488,20 +502,31 @@ public partial class App : Application
                 _popup.HidePopup();
                 return;
             }
-            if (_watcher?.IsCurrent(page.Sequence) == true) _popup.ShowEntries(field, target, matches);
+            if (_watcher?.IsCurrent(page.Sequence) != true) return;
+            AutoFillLog.Write("  list of entries shown at the login field");
+            _popup.ShowEntries(field, target, matches);
         });
     }
 
     private SuggestionPopup CreatePopup()
     {
         var popup = new SuggestionPopup();
-        popup.EntryChosen += async (entry, field, target, exact) =>
+        popup.EntryChosen += async (entry, field, target) =>
         {
             // The card may belong to a page the user has left, or to a form found on the page with the cursor
             // elsewhere: nothing is typed unless the cursor is (or could be put) in that very field.
-            if (!await Task.Run(() => AutoTypeService.PutCursorInto(field))) return;
-            // An entry chosen for another address of its domain (single sign-on page) is filled there by itself next time.
-            if (target is { IsBrowser: true } && !exact) entry = AutoType.Associate(entry, target);
+            if (!await Task.Run(() => AutoTypeService.PutCursorInto(field)))
+            {
+                AutoFillLog.Write($"chosen in the list: \"{entry.Title}\", but the cursor is no longer in that field (window {(Native.GetForegroundWindow() == field.Window ? "in front" : "not in front")}): nothing typed");
+                return;
+            }
+            // The account chosen for a site is filled in there by itself next time (also among several accounts of the
+            // site, and on another address of its domain such as a single sign-on page).
+            if (target is { IsBrowser: true })
+            {
+                entry = AutoType.RememberChoice(entry, target);
+                AutoFillLog.Write($"chosen in the list: \"{entry.Title}\", filled in by itself on {AutoFillLog.Describe(target)} from now on");
+            }
             AutoType.MarkFilled(field.Window, target);
             await AutoType.FillFieldAsync(entry, field);
         };
@@ -514,7 +539,7 @@ public partial class App : Application
             var (entry, remember) = await AutoTypePickerWindow.PickAsync(target, [], Vault.ActiveEntries);
             Native.ForceForeground(field.Window);
             if (entry == null) return;
-            if (remember) entry = AutoType.Associate(entry, target);
+            if (remember) entry = AutoType.RememberChoice(entry, target);
             await Task.Delay(150);
             AutoType.MarkFilled(field.Window, target);
             await AutoType.FillFieldAsync(entry, field);

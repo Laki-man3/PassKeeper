@@ -40,7 +40,7 @@ Offline password manager for Windows. No network access, no cloud, no telemetry.
 | Export | 13 formats |
 | UI languages | English, Russian |
 | Help | built-in user guide (works offline) |
-| Tests | 104 unit tests |
+| Tests | 105 unit tests |
 
 ### Features
 
@@ -48,7 +48,7 @@ Offline password manager for Windows. No network access, no cloud, no telemetry.
 - Entry fields: title, login, password, URLs, e-mail, phone, key/token, token PIN, TOTP, notes, folders, favorites, custom (hidden) fields, password history, trash.
 - Duplicate an entry, or copy a site's login and password into an entry for a VPN client or program. When a password changes, entries that still use the old one can be updated at once.
 - Users: first run creates a local user (name + master password), then a mandatory PIN; later starts and inactivity locks ask for the PIN only. Sign out deletes the PIN; signing in again takes the name and master password and a new PIN. Deleting a user in Settings erases that user's vault, PIN and backups. Data of earlier versions becomes the first user.
-- Websites: when a sign-in page opens, its form is found (the cursor is put into the login field with a click if needed, only when nothing covers it) and filled with the entry saved for that address, even when other entries share the domain (a company's other services). Several candidates: a list next to the login field; the chosen entry remembers the address and is filled in by itself next time. No entry: pick any entry and remember the site for it. Each page is filled once; fields the user has typed in are left alone.
+- Websites: when a sign-in page opens, its form is found (the cursor is put into the login field with a click if needed, only when nothing covers it) and filled with the entry saved for that address, even when other entries share the domain (a company's other services). Several candidates: a list next to the login field; the chosen entry becomes the account for that site and is filled in by itself next time, also among several accounts saved for one address. A site is its host name, so sign-in pages with a fresh one-time link every time are recognised; a page is also noticed by its changed address when the title stays the same. No entry: pick any entry and remember the site for it. Each page is filled once and a site at most twice in 3 minutes; fields the user has typed in are left alone. An optional autofill log (no logins, passwords or full addresses) shows why a form was or was not filled.
 - Entries work both ways: a site's login and password can be copied into an entry for a VPN client or program, and any VPN or program entry can be used on a website ("Use for a website…").
 - Autofill in applications: a suggestion appears next to a focused login, password, e-mail, phone, one-time code, PIN or key field; when one entry belongs to the window, an empty form is filled in by itself (without Enter). The auto-type hotkey matches the active site or window and fills its fields one by one.
 - Resizable layout: the borders between sections, the entry list and the details can be dragged; widths are remembered. In a small window the panes narrow and fields and buttons are placed one under another.
@@ -90,7 +90,7 @@ Chrome 127+ protects newly saved passwords with App-Bound Encryption, which thir
 ### Installation
 
 ```bat
-PassKeeper-Setup-1.4.0.exe
+PassKeeper-Setup-1.4.1.exe
 ```
 
 | Mode | Location | Rights |
@@ -104,7 +104,7 @@ The autostart and language chosen in the installer are used on the first run.
 Silent install: `/S`, `/allusers` or `/currentuser`, `/desktop`, `/autostart` or `/noautostart`, `/nolaunch`, `"/dir=path"`, `/lang=en|ru`. Exit codes: 0 ok, 1 error, 740 elevation required, 1602 cancelled.
 
 ```bat
-PassKeeper-Setup-1.4.0.exe /S /allusers /desktop /autostart
+PassKeeper-Setup-1.4.1.exe /S /allusers /desktop /autostart
 ```
 
 ### Uninstall
@@ -177,7 +177,7 @@ Output in `dist\<version>\`: installer, portable zip, `SHA256SUMS.txt`, `7z\` vo
 | Экспорт | 13 форматов |
 | Языки интерфейса | русский, английский |
 | Справка | встроенное руководство (работает без сети) |
-| Тесты | 104 модульных теста |
+| Тесты | 105 модульных тестов |
 
 ### Возможности
 
@@ -185,7 +185,7 @@ Output in `dist\<version>\`: installer, portable zip, `SHA256SUMS.txt`, `7z\` vo
 - Поля записи: название, логин, пароль, адреса сайтов, e-mail, телефон, ключ/токен, PIN токена, TOTP, заметки, папки, избранное, дополнительные (скрытые) поля, история паролей, корзина.
 - Дублирование записи и копирование логина и пароля сайта в запись для VPN‑клиента или программы. При смене пароля записи со старым паролем можно обновить сразу.
 - Пользователи: при первом запуске создаётся локальный пользователь (имя + мастер-пароль), затем обязательный PIN; при следующих запусках и после автоблокировки запрашивается только PIN. Выход из пользователя удаляет PIN; при повторном входе нужны имя и мастер-пароль и новый PIN. Удаление пользователя в настройках стирает его хранилище, PIN и резервные копии. Данные прежних версий становятся первым пользователем.
-- Сайты: при открытии страницы входа PassKeeper находит форму (если нужно, ставит курсор в поле логина щелчком — только когда поле ничем не закрыто) и подставляет запись, сохранённую для этого адреса, даже если у домена есть другие записи (другие сервисы компании). Несколько кандидатов — список у поля логина; выбранная запись запоминает адрес и в следующий раз подставится сама. Записи нет — можно выбрать любую и запомнить для неё сайт. Каждая страница заполняется один раз; поля, в которые пользователь уже что-то ввёл, не трогаются.
+- Сайты: при открытии страницы входа PassKeeper находит форму (если нужно, ставит курсор в поле логина щелчком — только когда поле ничем не закрыто) и подставляет запись, сохранённую для этого адреса, даже если у домена есть другие записи (другие сервисы компании). Несколько кандидатов — список у поля логина; выбранная запись становится основной для сайта и в следующий раз подставится сама, даже если для одного адреса сохранено несколько учётных записей. Сайт определяется по имени, поэтому страницы входа с новой одноразовой ссылкой при каждом входе распознаются; открытие страницы замечается и по смене адреса, если заголовок не меняется. Записи нет — можно выбрать любую и запомнить для неё сайт. Каждая страница заполняется один раз, сайт — не больше двух раз за 3 минуты; поля, в которые пользователь уже что-то ввёл, не трогаются. Журнал автозаполнения (по желанию, без логинов, паролей и полных адресов) показывает, почему форма заполнена или нет.
 - Записи работают в обе стороны: логин и пароль сайта копируются в запись VPN‑клиента или программы, а запись VPN или программы можно использовать на сайте («Использовать для сайта…»).
 - Автозаполнение в программах: подсказка появляется рядом с полем логина, пароля, e-mail, телефона, одноразового кода, PIN или ключа; если окну соответствует одна запись, пустая форма заполняется сама (без Enter). Горячая клавиша подбирает запись по сайту или окну и заполняет поля по отдельности.
 - Размеры панелей: границы между разделами, списком записей и карточкой перетаскиваются мышью; ширина запоминается. В небольшом окне панели сужаются, а поля и кнопки перестраиваются в столбик.
@@ -227,7 +227,7 @@ Chrome 127+ шифрует новые пароли App-Bound Encryption, нед�
 ### Установка
 
 ```bat
-PassKeeper-Setup-1.4.0.exe
+PassKeeper-Setup-1.4.1.exe
 ```
 
 | Режим | Папка | Права |
@@ -241,7 +241,7 @@ PassKeeper-Setup-1.4.0.exe
 Тихая установка: `/S`, `/allusers` или `/currentuser`, `/desktop`, `/autostart` или `/noautostart`, `/nolaunch`, `"/dir=путь"`, `/lang=ru|en`. Коды возврата: 0 — успех, 1 — ошибка, 740 — нужны права администратора, 1602 — отменено.
 
 ```bat
-PassKeeper-Setup-1.4.0.exe /S /allusers /desktop /autostart
+PassKeeper-Setup-1.4.1.exe /S /allusers /desktop /autostart
 ```
 
 ### Удаление

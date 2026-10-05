@@ -27,8 +27,8 @@ public sealed class AutoTypePickerWindow : Window
 
     private AutoTypePickerWindow(TargetWindow target, List<EntryMatch> matches, IEnumerable<VaultEntry> all)
     {
-        // Nothing matched: whatever is chosen can be remembered for this site / program.
-        var rememberFor = matches.Count == 0 ? RememberLabel(target) : null;
+        // Nothing matched (or a site with several accounts): the choice can be remembered for this site / program.
+        var rememberFor = matches.Count == 0 || target.IsBrowser ? RememberLabel(target) : null;
         WindowStyle = WindowStyle.None;
         AllowsTransparency = true;
         Background = Brushes.Transparent;

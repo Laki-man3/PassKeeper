@@ -14,6 +14,17 @@ public sealed class TargetContext
 
 public sealed record EntryMatch(VaultEntry Entry, int Score);
 
+/// <summary>Match scores: what an entry has in common with the page or window in front.</summary>
+public static class MatchScore
+{
+    /// <summary>The user chose this entry for the site among several accounts.</summary>
+    public const int Chosen = 101;
+    /// <summary>The page address is the entry's address (or one of its other addresses).</summary>
+    public const int Exact = 100;
+    /// <summary>The window belongs to the entry's client or program.</summary>
+    public const int Window = 95;
+}
+
 public static class EntryMatcher
 {
     public static List<EntryMatch> Match(IEnumerable<VaultEntry> entries, TargetContext target)
@@ -32,8 +43,10 @@ public static class EntryMatcher
                 if (string.IsNullOrWhiteSpace(pattern)) continue;
                 if (WildcardMatch(title, pattern) || WildcardMatch(target.ProcessName, pattern) ||
                     WildcardMatch(target.ProcessName + ".exe", pattern))
-                    score = Math.Max(score, 95);
+                    score = Math.Max(score, MatchScore.Window);
             }
+            if (pageHost != null && e.AutoFillHosts.Contains(pageHost, StringComparer.OrdinalIgnoreCase))
+                score = MatchScore.Chosen;
 
             foreach (var url in e.AllUrls())
             {
@@ -73,8 +86,8 @@ public static class EntryMatcher
     {
         if (matches.Count == 0) return null;
         var top = matches[0];
-        if (matches.Count == 1) return top.Score >= (site ? 70 : 95) ? top.Entry : null;
-        return top.Score >= 95 && matches[1].Score < top.Score ? top.Entry : null;
+        if (matches.Count == 1) return top.Score >= (site ? 70 : MatchScore.Window) ? top.Entry : null;
+        return top.Score >= MatchScore.Window && matches[1].Score < top.Score ? top.Entry : null;
     }
 
     /// <summary>Case-insensitive wildcard match supporting '*' and '?'. Plain text matches as a substring.</summary>
