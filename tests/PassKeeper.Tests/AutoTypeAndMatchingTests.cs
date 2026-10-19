@@ -24,12 +24,15 @@ public class AutoTypeAndMatchingTests
         Assert.Null(AutoTypeSequence.Validate(string.Concat(tokens)));
         Assert.Equal(["broken {TAB"], AutoTypeSequence.Tokenize("broken {TAB"));
 
-        // A removed field takes its separator with it; keystroke sequences lose just the element.
-        Assert.Equal("{PASSWORD}{ENTER}", AutoTypeSequence.Remove("{USERNAME}{TAB}{PASSWORD}{ENTER}", 0));
-        Assert.Equal("{USERNAME}{ENTER}", AutoTypeSequence.Remove("{USERNAME}{TAB}{PASSWORD}{ENTER}", 2));
+        // The cross removes exactly the element it is on.
+        Assert.Equal("{TAB}{PASSWORD}{ENTER}", AutoTypeSequence.Remove("{USERNAME}{TAB}{PASSWORD}{ENTER}", 0));
+        Assert.Equal("{USERNAME}{PASSWORD}{ENTER}", AutoTypeSequence.Remove("{USERNAME}{TAB}{PASSWORD}{ENTER}", 1));
         Assert.Equal("{USERNAME}{TAB}{PASSWORD}", AutoTypeSequence.Remove("{USERNAME}{TAB}{PASSWORD}{ENTER}", 3));
-        Assert.Equal("{PASSWORD}{ENTER}", AutoTypeSequence.Remove("{USERNAME}{ENTER}{PASSWORD}{ENTER}", 0));
         Assert.Equal("{USERNAME}{ENTER}{DELAY 800}{ENTER}", AutoTypeSequence.Remove("{USERNAME}{ENTER}{DELAY 800}{PASSWORD}{ENTER}", 3));
+        // A Tab left at the start fills nothing: the plan is the password and Enter.
+        var plan = FieldPlan.Parse("{TAB}{PASSWORD}{ENTER}")!;
+        Assert.False(plan.Includes(FieldKind.Login));
+        Assert.True(plan.EnterAfter(FieldKind.Password));
     }
 
     [Fact]

@@ -41,14 +41,15 @@ Offline password manager for Windows. No network access, no cloud, no telemetry.
 | Export | 13 formats |
 | UI languages | English, Russian |
 | Help | built-in user guide (works offline) |
-| Tests | 112 unit tests |
+| Tests | 113 unit tests |
 
 ### Features
 
 - Sections: Websites, VPN and remote access, Programs, Other. The editor shows the fields of the section; entries of older versions get their section automatically.
 - Entry fields: title, login, password, URLs, e-mail, phone, key/token, token PIN, TOTP, notes, folders, favorites, custom (hidden) fields, password history, trash.
 - Duplicate an entry, or copy a site's login and password into an entry for a VPN client or program. When a password changes, entries that still use the old one can be updated at once.
-- Several entries at once: "Select all" above the list (Ctrl+A) or Ctrl/Shift+click; add to or remove from favorites, delete (to the trash, after a confirmation), restore or delete forever in the trash.
+- Several entries at once: a click on an entry's icon starts selecting, then clicks add or remove entries; "Select all" above the list (Ctrl+A); add to or remove from favorites, delete (to the trash, after a confirmation), restore or delete forever in the trash.
+- Folders ("Work", "Study", nested "Work/Mail"): created in the left pane, kept while empty, renamed or deleted (entries are kept); entries are dragged with the mouse into a folder, to favorites or to the trash.
 - Users: first run creates a local user (name + master password), then a mandatory PIN; later starts and inactivity locks ask for the PIN only. Sign out deletes the PIN; signing in again takes the name and master password and a new PIN. Deleting a user in Settings erases that user's vault, PIN and backups. Data of earlier versions becomes the first user.
 - Websites: when a sign-in page opens, its form is found (the cursor is put into the login field with a click if needed, only when nothing covers it) and filled with the entry saved for that address, even when other entries share the domain (a company's other services). Several candidates: a list next to the login field; the chosen entry becomes the account for that site and is filled in by itself next time, also among several accounts saved for one address. A site is its host name, so sign-in pages with a fresh one-time link every time are recognised; a page is also noticed by its changed address when the title stays the same. No entry: pick any entry and remember the site for it. Each page is filled once and a site at most twice in 3 minutes; fields the user has typed in are left alone. An optional autofill log (no logins, passwords or full addresses) shows why a form was or was not filled. With "Sign in automatically" in a site entry, Enter is pressed after the form is filled in (at most 2 attempts with a password in 10 minutes); the main switch is "Automatic sign-in to websites", separate from the one for clients.
 - New sites: on a sign-in page of a site without entries, "Create an entry for …" opens an entry with the address and the form's fields and fills the form after saving. After a sign-in done by hand, PassKeeper offers to save it (nothing is read from the page; the login and password are entered in PassKeeper); an entry with the same login and password can be used for the site instead of a second copy.
@@ -182,14 +183,15 @@ Output in `dist\<version>\`: installer, portable zip, `SHA256SUMS.txt`, `7z\` vo
 | Экспорт | 13 форматов |
 | Языки интерфейса | русский, английский |
 | Справка | встроенное руководство (работает без сети) |
-| Тесты | 112 модульных тестов |
+| Тесты | 113 модульных тестов |
 
 ### Возможности
 
 - Разделы: Сайты, VPN и удалённый доступ, Программы, Другое. Редактор показывает поля выбранного раздела; записям из прежних версий раздел назначается автоматически.
 - Поля записи: название, логин, пароль, адреса сайтов, e-mail, телефон, ключ/токен, PIN токена, TOTP, заметки, папки, избранное, дополнительные (скрытые) поля, история паролей, корзина.
 - Дублирование записи и копирование логина и пароля сайта в запись для VPN‑клиента или программы. При смене пароля записи со старым паролем можно обновить сразу.
-- Несколько записей сразу: «Выбрать все» над списком (Ctrl+A) или Ctrl/Shift+щелчок; добавить в избранное или убрать из него, удалить (в корзину, после подтверждения), в корзине — восстановить или удалить навсегда.
+- Несколько записей сразу: щелчок по значку записи начинает выбор, дальше щелчки добавляют и убирают записи; «Выбрать все» над списком (Ctrl+A); добавить в избранное или убрать из него, удалить (в корзину, после подтверждения), в корзине — восстановить или удалить навсегда.
+- Папки («Работа», «Учёба», вложенные «Работа/Почта»): создаются в левой панели, сохраняются пустыми, переименовываются и удаляются (записи остаются); записи перетаскиваются мышью в папку, в избранное или в корзину.
 - Пользователи: при первом запуске создаётся локальный пользователь (имя + мастер-пароль), затем обязательный PIN; при следующих запусках и после автоблокировки запрашивается только PIN. Выход из пользователя удаляет PIN; при повторном входе нужны имя и мастер-пароль и новый PIN. Удаление пользователя в настройках стирает его хранилище, PIN и резервные копии. Данные прежних версий становятся первым пользователем.
 - Сайты: при открытии страницы входа PassKeeper находит форму (если нужно, ставит курсор в поле логина щелчком — только когда поле ничем не закрыто) и подставляет запись, сохранённую для этого адреса, даже если у домена есть другие записи (другие сервисы компании). Несколько кандидатов — список у поля логина; выбранная запись становится основной для сайта и в следующий раз подставится сама, даже если для одного адреса сохранено несколько учётных записей. Сайт определяется по имени, поэтому страницы входа с новой одноразовой ссылкой при каждом входе распознаются; открытие страницы замечается и по смене адреса, если заголовок не меняется. Записи нет — можно выбрать любую и запомнить для неё сайт. Каждая страница заполняется один раз, сайт — не больше двух раз за 3 минуты; поля, в которые пользователь уже что-то ввёл, не трогаются. Журнал автозаполнения (по желанию, без логинов, паролей и полных адресов) показывает, почему форма заполнена или нет. Если в записи сайта включено «Входить автоматически», после заполнения формы нажимается Enter (не больше 2 попыток с вводом пароля за 10 минут); общий выключатель «Автовход на сайтах» отделён от выключателя для клиентов.
 - Новые сайты: на странице входа сайта без записей «Создать запись для …» открывает запись с адресом и полями формы и после сохранения заполняет форму. После входа вручную PassKeeper предлагает сохранить его (со страницы ничего не считывается, логин и пароль вводятся в PassKeeper); запись с теми же логином и паролем можно использовать для сайта вместо второй копии.

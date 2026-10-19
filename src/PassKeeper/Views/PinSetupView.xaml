@@ -4,7 +4,7 @@
              xmlns:l="clr-namespace:PassKeeper.Localization"
              xmlns:c="clr-namespace:PassKeeper.Controls">
     <Grid Background="{DynamicResource Brush.PageGlow}">
-        <StackPanel Width="380" VerticalAlignment="Center" Margin="0,40,0,0">
+        <StackPanel Width="380" VerticalAlignment="Center" Margin="0,8,0,0">
             <Border Width="64" Height="64" CornerRadius="20" Background="{DynamicResource Brush.AccentSoft}" HorizontalAlignment="Center">
                 <TextBlock Style="{StaticResource Icon}" Text="&#xE8D7;" FontSize="28" Foreground="{DynamicResource Brush.AccentText}" />
             </Border>

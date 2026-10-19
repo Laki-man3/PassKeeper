@@ -90,11 +90,14 @@ public sealed class HelpDialog : DialogBase
     private void ScrollTo(string id)
     {
         if (!_anchors.TryGetValue(id, out var block)) return;
-        if (_scroll != null && Top(block) is { } top) _scroll.ScrollToVerticalOffset(Math.Max(0, top - 4));
+        if (_scroll != null && Top(block) is { } top) _scroll.ScrollToVerticalOffset(Math.Max(0, _scroll.VerticalOffset + top - 4));
         else block.BringIntoView();
     }
 
-    /// <summary>Position of a block in document coordinates (the scroll offset is in the same space).</summary>
+    /// <summary>
+    /// Position of a block relative to the top of the visible text (negative above it): the document is laid out
+    /// already scrolled, so the scroll offset is added to get its place in the whole text.
+    /// </summary>
     private static double? Top(Block block)
     {
         var rect = block.ContentStart.GetCharacterRect(LogicalDirection.Forward);
@@ -109,7 +112,7 @@ public sealed class HelpDialog : DialogBase
         foreach (ListBoxItem item in _toc.Items)
         {
             if (item.Tag is not string id || !_anchors.TryGetValue(id, out var block) || Top(block) is not { } top) continue;
-            if (top <= _scroll.VerticalOffset + 60) current = item;
+            if (top <= 60) current = item;
             else break;
         }
         // At the very end the last sections may never reach the top: the bottom of the text selects the last one.

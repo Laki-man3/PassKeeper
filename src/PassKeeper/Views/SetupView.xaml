@@ -4,7 +4,7 @@
              xmlns:l="clr-namespace:PassKeeper.Localization"
              xmlns:c="clr-namespace:PassKeeper.Controls">
     <Grid Background="{DynamicResource Brush.PageGlow}">
-        <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,40,0,0">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,8,0,0">
             <StackPanel Width="420" VerticalAlignment="Center" Margin="0,24,0,32">
                 <Image Source="{StaticResource LogoImage}" Width="68" Height="68" HorizontalAlignment="Left" />
                 <TextBlock Style="{StaticResource Text.H1}" Margin="0,22,0,8" Text="{l:T Setup.Title}" />
@@ -52,7 +52,7 @@
         </ScrollViewer>
 
         <!-- Declared after the scroll viewer: it covers the whole page and would otherwise take the clicks. -->
-        <Border Style="{StaticResource SegmentHost}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,48,28,0">
+        <Border Style="{StaticResource SegmentHost}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,16,28,0">
             <StackPanel Orientation="Horizontal">
                 <RadioButton x:Name="LangRu" Style="{StaticResource Segment}" Content="Русский" GroupName="SetupLang" Checked="Lang_Checked" />
                 <RadioButton x:Name="LangEn" Style="{StaticResource Segment}" Content="English" GroupName="SetupLang" Checked="Lang_Checked" />

@@ -15,7 +15,7 @@ public sealed class BulkActionsView : UserControl
 
     public BulkActionsView(IReadOnlyList<VaultEntry> selected, int shown, bool trash)
     {
-        var root = new StackPanel { Margin = new Thickness(36, 46, 36, 32), MaxWidth = 760 };
+        var root = new StackPanel { Margin = new Thickness(36, 18, 36, 32), MaxWidth = 760 };
 
         var header = new Grid { Margin = new Thickness(0, 0, 0, 22) };
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });

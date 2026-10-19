@@ -308,12 +308,76 @@ public sealed class VaultService
         return n;
     }
 
+    /// <summary>The folders of the entries and the ones the user created, each once.</summary>
     public IReadOnlyList<string> Folders() =>
-        ActiveEntries.Select(e => e.Folder.Trim())
+        ActiveEntries.Select(e => NormalizeFolder(e.Folder)).Concat(Data.Folders.Select(NormalizeFolder))
             .Where(f => f.Length > 0)
             .Distinct(StringComparer.CurrentCultureIgnoreCase)
             .OrderBy(f => f, StringComparer.CurrentCultureIgnoreCase)
             .ToList();
+
+    /// <summary>"Work / Mail " → "Work/Mail": parts trimmed, no empty parts.</summary>
+    public static string NormalizeFolder(string? folder) =>
+        string.Join("/", (folder ?? "").Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+    private static bool InFolder(string folder, string root) =>
+        folder.Equals(root, StringComparison.CurrentCultureIgnoreCase) || folder.StartsWith(root + "/", StringComparison.CurrentCultureIgnoreCase);
+
+    /// <summary>Creates an empty folder (to move entries into). Returns its name, or null when the name is empty.</summary>
+    public string? AddFolder(string name)
+    {
+        RequireUnlocked();
+        var folder = NormalizeFolder(name);
+        if (folder.Length == 0) return null;
+        if (!Folders().Contains(folder, StringComparer.CurrentCultureIgnoreCase))
+        {
+            Data.Folders.Add(folder);
+            Save();
+        }
+        return Folders().First(f => f.Equals(folder, StringComparison.CurrentCultureIgnoreCase));
+    }
+
+    /// <summary>Moves entries into a folder ("" takes them out of any folder).</summary>
+    public int MoveToFolder(IEnumerable<Guid> ids, string folder)
+    {
+        var target = NormalizeFolder(folder);
+        return MutateMany(ids, e => e.Folder = target);
+    }
+
+    /// <summary>Renames a folder with its subfolders; the entries in them go along.</summary>
+    public void RenameFolder(string from, string to)
+    {
+        RequireUnlocked();
+        var old = NormalizeFolder(from);
+        var name = NormalizeFolder(to);
+        if (old.Length == 0 || name.Length == 0 || old == name) return;
+        string Renamed(string f) => name + f[old.Length..];
+        foreach (var e in Data.Entries.Where(e => InFolder(NormalizeFolder(e.Folder), old)))
+        {
+            e.Folder = Renamed(NormalizeFolder(e.Folder));
+            e.ModifiedUtc = DateTime.UtcNow;
+        }
+        Data.Folders = Data.Folders.Select(NormalizeFolder).Select(f => InFolder(f, old) ? Renamed(f) : f).Distinct(StringComparer.CurrentCultureIgnoreCase).ToList();
+        Save();
+    }
+
+    /// <summary>Removes a folder with its subfolders. The entries are kept: they only leave the folder. Returns how many.</summary>
+    public int DeleteFolder(string name)
+    {
+        RequireUnlocked();
+        var folder = NormalizeFolder(name);
+        if (folder.Length == 0) return 0;
+        var moved = 0;
+        foreach (var e in Data.Entries.Where(e => InFolder(NormalizeFolder(e.Folder), folder)))
+        {
+            e.Folder = "";
+            e.ModifiedUtc = DateTime.UtcNow;
+            moved++;
+        }
+        Data.Folders.RemoveAll(f => InFolder(NormalizeFolder(f), folder));
+        Save();
+        return moved;
+    }
 
     /// <summary>Copies the current vault file into the backup folder.</summary>
     public string CreateBackup(string? targetPath = null)

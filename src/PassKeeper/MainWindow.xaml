@@ -6,21 +6,29 @@
         Background="{DynamicResource Brush.WindowBg}" FontFamily="{StaticResource Font.Ui}" FontSize="13"
         TextElement.Foreground="{DynamicResource Brush.Text}" UseLayoutRounding="True" SnapsToDevicePixels="True">
     <WindowChrome.WindowChrome>
-        <WindowChrome CaptionHeight="40" ResizeBorderThickness="6" GlassFrameThickness="0,0,0,1" CornerRadius="0" UseAeroCaptionButtons="False" />
+        <WindowChrome CaptionHeight="32" ResizeBorderThickness="6" GlassFrameThickness="0,0,0,1" CornerRadius="0" UseAeroCaptionButtons="False" />
     </WindowChrome.WindowChrome>
 
     <Grid x:Name="Root">
-        <ContentControl x:Name="PageHost" Focusable="False" IsTabStop="False" />
+        <Grid.RowDefinitions>
+            <RowDefinition Height="32" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
 
-        <StackPanel HorizontalAlignment="Right" VerticalAlignment="Top" Orientation="Horizontal" WindowChrome.IsHitTestVisibleInChrome="True">
-            <Button Style="{StaticResource Btn.Caption}" Content="&#xE921;" Click="Minimize_Click" />
-            <Button x:Name="MaxButton" Style="{StaticResource Btn.Caption}" Content="&#xE922;" Click="Maximize_Click" />
-            <Button Style="{StaticResource Btn.CaptionClose}" Content="&#xE8BB;" Click="Close_Click" />
-        </StackPanel>
+        <!-- title bar of its own: the window is dragged by it, and pages never slide under its buttons -->
+        <Border x:Name="TitleBar" Background="{DynamicResource Brush.Sidebar}" BorderBrush="{DynamicResource Brush.Border}" BorderThickness="0,0,0,1">
+            <StackPanel HorizontalAlignment="Right" VerticalAlignment="Top" Orientation="Horizontal" WindowChrome.IsHitTestVisibleInChrome="True">
+                <Button Style="{StaticResource Btn.Caption}" Content="&#xE921;" Click="Minimize_Click" />
+                <Button x:Name="MaxButton" Style="{StaticResource Btn.Caption}" Content="&#xE922;" Click="Maximize_Click" />
+                <Button Style="{StaticResource Btn.CaptionClose}" Content="&#xE8BB;" Click="Close_Click" />
+            </StackPanel>
+        </Border>
 
-        <Grid x:Name="DialogLayer" />
+        <ContentControl x:Name="PageHost" Grid.Row="1" Focusable="False" IsTabStop="False" />
 
-        <Border x:Name="Toast" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,28" Padding="16,10"
+        <Grid x:Name="DialogLayer" Grid.RowSpan="2" />
+
+        <Border x:Name="Toast" Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,28" Padding="16,10"
                 CornerRadius="10" Background="{DynamicResource Brush.Popup}" BorderBrush="{DynamicResource Brush.Border}" BorderThickness="1"
                 Visibility="Collapsed" IsHitTestVisible="False" Opacity="0">
             <Border.Effect>

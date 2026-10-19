@@ -50,7 +50,7 @@ public sealed class EntryDetailsView : UserControl
         _entry = entry;
         _totpTick = null;
         var offset = _scroll.VerticalOffset;
-        var root = new StackPanel { Margin = new Thickness(36, 46, 36, 32), MaxWidth = 760 };
+        var root = new StackPanel { Margin = new Thickness(36, 18, 36, 32), MaxWidth = 760 };
         root.Children.Add(BuildHeader());
 
         var fields = new StackPanel();

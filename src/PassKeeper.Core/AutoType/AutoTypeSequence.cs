@@ -150,27 +150,16 @@ public static class AutoTypeSequence
     }
 
     /// <summary>
-    /// The sequence without the element at <paramref name="index"/>. In a sequence of fields the {TAB} that only
-    /// separated the removed field goes with it ("{USERNAME}{TAB}{PASSWORD}" without the login is "{PASSWORD}").
+    /// The sequence without the element at <paramref name="index"/> (the cross on it in the editor): exactly that
+    /// element goes, the rest stays as it is. A {TAB} left without a field around it does nothing in a sequence of
+    /// fields.
     /// </summary>
     public static string Remove(string sequence, int index)
     {
         var tokens = Tokenize(sequence);
         if (index < 0 || index >= tokens.Count) return sequence;
         tokens.RemoveAt(index);
-        var rest = string.Concat(tokens);
-        if (FieldPlan.Parse(sequence) == null) return rest;
-        var tidy = new List<string>();
-        foreach (var t in tokens)
-        {
-            var separator = IsKey(t, "TAB") || IsKey(t, "ENTER");
-            if (IsKey(t, "TAB") && (tidy.Count == 0 || IsKey(tidy[^1], "TAB") || IsKey(tidy[^1], "ENTER"))) continue;
-            if (IsKey(t, "ENTER") && tidy.Count > 0 && IsKey(tidy[^1], "TAB")) tidy.RemoveAt(tidy.Count - 1);
-            if (separator && tidy.Count == 0) continue;
-            tidy.Add(t);
-        }
-        while (tidy.Count > 0 && IsKey(tidy[^1], "TAB")) tidy.RemoveAt(tidy.Count - 1);
-        return string.Concat(tidy);
+        return string.Concat(tokens);
     }
 
     /// <summary>The same fields without pressing Enter anywhere (automatic sign-in off).</summary>

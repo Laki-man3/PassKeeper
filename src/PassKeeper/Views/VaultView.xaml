@@ -8,6 +8,8 @@
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
 
         <DataTemplate x:Key="NavTemplate" DataType="{x:Type vm:NavItem}">
+            <!-- the outline shows where dragged entries would go -->
+            <Border x:Name="DropBd" CornerRadius="6" Margin="-6,1" Padding="6,0" BorderThickness="1" BorderBrush="Transparent" Background="Transparent">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="26" />
@@ -19,7 +21,16 @@
                 <TextBlock Grid.Column="2" Text="{Binding CountText}" VerticalAlignment="Center" FontSize="11.5" Foreground="{DynamicResource Brush.TextMuted}" Margin="8,0,0,0" />
                 <Border x:Name="Sep" Grid.ColumnSpan="3" Height="1" Background="{DynamicResource Brush.Border}" VerticalAlignment="Center" Visibility="Collapsed" />
             </Grid>
+            </Border>
             <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsDropTarget}" Value="True">
+                    <Setter TargetName="DropBd" Property="Background" Value="{DynamicResource Brush.AccentSoft}" />
+                    <Setter TargetName="DropBd" Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Kind}" Value="NewFolder">
+                    <Setter TargetName="Ic" Property="Foreground" Value="{DynamicResource Brush.AccentText}" />
+                    <Setter TargetName="Lb" Property="Foreground" Value="{DynamicResource Brush.AccentText}" />
+                </DataTrigger>
                 <DataTrigger Binding="{Binding IsSeparator}" Value="True">
                     <Setter TargetName="Ic" Property="Visibility" Value="Collapsed" />
                     <Setter TargetName="Lb" Property="Visibility" Value="Collapsed" />
@@ -61,13 +72,23 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <c:Avatar x:Name="Av" SourceText="{Binding AvatarSource}" Size="36" />
-                <!-- several entries selected: a round check instead of the avatar; a click on it adds or removes the entry -->
-                <Border x:Name="SelectMark" Width="36" Height="36" CornerRadius="18" BorderThickness="1.5" Visibility="Collapsed"
-                        Background="{DynamicResource Brush.SurfaceAlt}" BorderBrush="{DynamicResource Brush.BorderStrong}"
-                        PreviewMouseLeftButtonDown="SelectMark_MouseDown">
-                    <TextBlock x:Name="SelectCheck" Style="{StaticResource Icon}" Text="&#xE73E;" FontSize="14" Foreground="{DynamicResource Brush.OnAccent}" Visibility="Collapsed" />
-                </Border>
+                <!-- the avatar turns into a round check under the mouse and while entries are being selected: a click on
+                     it selects the entry (or takes it out of the selection) -->
+                <Button x:Name="AvatarSlot" Focusable="False" Cursor="Hand" Click="AvatarSlot_Click" ToolTip="{l:T Vault.SelectTip}"
+                        AutomationProperties.Name="{l:T Vault.SelectEntry}">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Grid Background="Transparent"><ContentPresenter /></Grid>
+                        </ControlTemplate>
+                    </Button.Template>
+                    <Grid>
+                        <c:Avatar x:Name="Av" SourceText="{Binding AvatarSource}" Size="36" />
+                        <Border x:Name="SelectMark" Width="36" Height="36" CornerRadius="18" BorderThickness="1.5" Visibility="Collapsed"
+                                Background="{DynamicResource Brush.SurfaceAlt}" BorderBrush="{DynamicResource Brush.BorderStrong}">
+                            <TextBlock x:Name="SelectCheck" Style="{StaticResource Icon}" Text="&#xE73E;" FontSize="14" Foreground="{DynamicResource Brush.OnAccent}" Visibility="Collapsed" />
+                        </Border>
+                    </Grid>
+                </Button>
                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0,6,0">
                     <TextBlock Text="{Binding Title}" FontSize="13.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
                     <TextBlock Text="{Binding Subtitle}" FontSize="12" Foreground="{DynamicResource Brush.TextMuted}" TextTrimming="CharacterEllipsis" Margin="0,1,0,0" />
@@ -80,6 +101,11 @@
                     <Setter TargetName="Av" Property="Visibility" Value="Collapsed" />
                     <Setter TargetName="SelectMark" Property="Visibility" Value="Visible" />
                 </DataTrigger>
+                <Trigger SourceName="AvatarSlot" Property="IsMouseOver" Value="True">
+                    <Setter TargetName="Av" Property="Visibility" Value="Collapsed" />
+                    <Setter TargetName="SelectMark" Property="Visibility" Value="Visible" />
+                    <Setter TargetName="SelectMark" Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+                </Trigger>
                 <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
                     <Setter TargetName="SelectMark" Property="Background" Value="{DynamicResource Brush.Accent}" />
                     <Setter TargetName="SelectMark" Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
@@ -137,14 +163,16 @@
                 </StackPanel>
 
                 <ListBox x:Name="NavList" Style="{StaticResource List.Plain}" ItemContainerStyle="{StaticResource NavContainer}"
-                         ItemTemplate="{StaticResource NavTemplate}" SelectionChanged="NavList_SelectionChanged" />
+                         ItemTemplate="{StaticResource NavTemplate}" SelectionChanged="NavList_SelectionChanged"
+                         AllowDrop="True" DragEnter="NavList_DragOver" DragOver="NavList_DragOver" DragLeave="NavList_DragLeave" Drop="NavList_Drop"
+                         PreviewMouseRightButtonDown="NavList_RightButtonDown" />
             </DockPanel>
         </Border>
 
         <!-- ============================================================ entry list -->
         <Border Grid.Column="1" BorderBrush="{DynamicResource Brush.Border}" BorderThickness="0,0,1,0">
             <DockPanel>
-                <Grid DockPanel.Dock="Top" Margin="16,46,16,8">
+                <Grid DockPanel.Dock="Top" Margin="16,16,16,8">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
@@ -181,6 +209,7 @@
                 <Grid>
                     <ListBox x:Name="EntryList" Style="{StaticResource List.Plain}" ItemContainerStyle="{StaticResource Item.Card}" Padding="0,0,0,12" SelectionMode="Extended"
                              ItemTemplate="{StaticResource EntryTemplate}" SelectionChanged="EntryList_SelectionChanged"
+                             PreviewMouseLeftButtonDown="EntryList_PreviewMouseDown" PreviewMouseMove="EntryList_PreviewMouseMove" PreviewMouseLeftButtonUp="EntryList_PreviewMouseUp"
                              KeyDown="EntryList_KeyDown" MouseDoubleClick="EntryList_MouseDoubleClick">
                         <ListBox.ContextMenu>
                             <ContextMenu x:Name="EntryMenu" Opened="EntryMenu_Opened">

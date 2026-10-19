@@ -33,7 +33,7 @@ Left pane:
 | VPN and remote access | VPN clients, VDI, remote desktop |
 | Programs | desktop programs: 1C, SAP, PuTTY, token PIN prompts |
 | Other | Wi-Fi, licences, notes and everything else |
-| Folders | your folders (shown once entries have a folder) |
+| Folders | your folders: **New folder** creates one ("Work", "Study"; "Work/Mail" is a folder inside a folder), entries are moved into a folder by dragging them, a right click on a folder renames or deletes it (its entries are kept) |
 | Trash | deleted entries; restore them or delete them permanently |
 
 The section is chosen in the entry editor. Entries of older versions and imported entries get a section automatically: an entry with a VPN client goes to "VPN and remote access", one with program windows to "Programs", one with a web address to "Websites".
@@ -44,10 +44,11 @@ The borders between the left pane, the list and the entry card can be dragged wi
 
 ### Several entries at once {#bulk}
 
-- The box left of the section title above the list (**Select all**, Ctrl+A) selects every entry in the list, for example all entries of "VPN and remote access" or those found by a search.
-- Ctrl+click adds an entry to the selection or removes it, Shift+click selects a range.
-- While several entries are selected, their icons turn into round checks: a click on one adds or removes that entry.
+- **One by one:** point at an entry's icon and it turns into a round check; a click on it starts selecting. From then on a plain click on any entry adds it to the selection or takes it out. Selecting ends when nothing is selected any more (or **Clear selection**, Esc).
+- **All at once:** the box left of the section title above the list (**Select all**, Ctrl+A) selects every entry in the list, for example all entries of "VPN and remote access" or those found by a search.
+- Ctrl+click and Shift+click work too.
 - The right pane offers actions for all of them: **Add to favorites**, **Remove from favorites**, **Delete** (to the trash, after a confirmation); in the trash **Restore** and **Delete forever**. The context menu has the same actions; Delete removes the selected entries, Esc clears the selection.
+- **Dragging:** entries (one, or all selected ones) can be dragged with the mouse onto a folder in the left pane, onto **Favorites** or into the **Trash**; onto **New folder** to create a folder and move them into it at once.
 
 ## Adding and editing entries {#entries}
 
@@ -329,6 +330,8 @@ Uninstall.exe /S
 | Ctrl+C | copy password |
 | Ctrl+B | copy login |
 | Double-click an entry | copy password |
+| Click an entry's icon | start selecting several entries |
+| Drag an entry | to a folder, to favorites or to the trash |
 | Ctrl+A | select all entries in the list |
 | Ctrl+click, Shift+click | add an entry to the selection, select a range |
 | Delete | move to trash (several selected entries after a confirmation) |

@@ -49,13 +49,14 @@ public sealed class EntryItem(VaultEntry entry) : Observable
     }
 }
 
-public enum NavKind { All, Favorites, Category, Folder, Trash, Header, Separator }
+public enum NavKind { All, Favorites, Category, Folder, Trash, Header, Separator, NewFolder }
 
 /// <summary>Sidebar navigation row.</summary>
 public sealed class NavItem : Observable
 {
     private int _count;
     private string _label = "";
+    private bool _isDropTarget;
 
     public required NavKind Kind { get; init; }
     public string Folder { get; init; } = "";
@@ -81,6 +82,16 @@ public sealed class NavItem : Observable
     }
 
     public string CountText => Count > 0 ? Count.ToString() : "";
+
+    /// <summary>Entries can be dropped here: a folder (also a new one), favorites, the trash.</summary>
+    public bool AcceptsEntries => Kind is NavKind.Folder or NavKind.Favorites or NavKind.Trash or NavKind.NewFolder;
+
+    /// <summary>Entries are being dragged over this row.</summary>
+    public bool IsDropTarget
+    {
+        get => _isDropTarget;
+        set => Set(ref _isDropTarget, value);
+    }
 
     public bool SameAs(NavItem? other) => other != null && other.Kind == Kind && other.Folder == Folder && other.Category == Category;
 }

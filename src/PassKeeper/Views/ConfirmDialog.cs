@@ -49,6 +49,46 @@ public sealed class ConfirmDialog : DialogBase
         App.Instance.Main.ShowDialogAsync(new ConfirmDialog(title, message, Loc.T("Common.Ok"), showCancel: false));
 }
 
+/// <summary>Asks for a short text (a folder name). Result: the text, or null when cancelled.</summary>
+public sealed class TextPromptDialog : DialogBase
+{
+    private readonly TextBox _box = new();
+
+    public TextPromptDialog(string title, string message, string confirmText, string initial = "")
+    {
+        DialogWidth = 420;
+        var root = new StackPanel { Margin = new Thickness(26, 24, 26, 22) };
+        root.Children.Add(new TextBlock { Text = title, Style = (Style)FindResource("Text.H2"), FontSize = 18 });
+        root.Children.Add(new TextBlock { Text = message, Style = (Style)FindResource("Text.Secondary"), Margin = new Thickness(0, 8, 0, 14) });
+        _box.Text = initial;
+        _box.KeyDown += (_, e) =>
+        {
+            if (e.Key == System.Windows.Input.Key.Enter) Submit();
+        };
+        System.Windows.Automation.AutomationProperties.SetAutomationId(_box, "PromptText");
+        root.Children.Add(_box);
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 20, 0, 0) };
+        var cancel = new Button { Style = (Style)FindResource("Btn.Ghost"), Content = Loc.T("Common.Cancel"), IsCancel = true };
+        cancel.Click += (_, _) => Close(null);
+        var ok = new Button { Style = (Style)FindResource("Btn.Primary"), Content = confirmText, Margin = new Thickness(8, 0, 0, 0), MinWidth = 110 };
+        ok.Click += (_, _) => Submit();
+        buttons.Children.Add(cancel);
+        buttons.Children.Add(ok);
+        root.Children.Add(buttons);
+        Content = root;
+        InitialFocus = _box;
+        Loaded += (_, _) => _box.SelectAll();
+    }
+
+    private void Submit()
+    {
+        if (_box.Text.Trim().Length > 0) Close(_box.Text.Trim());
+    }
+
+    public static async Task<string?> AskAsync(string title, string message, string confirmText, string initial = "") =>
+        await App.Instance.Main.ShowDialogAsync(new TextPromptDialog(title, message, confirmText, initial)) as string;
+}
+
 /// <summary>Asks for a password (optionally a KeePass key file). Result: (string Password, byte[]? KeyFile) or null.</summary>
 public sealed class PasswordPromptDialog : DialogBase
 {

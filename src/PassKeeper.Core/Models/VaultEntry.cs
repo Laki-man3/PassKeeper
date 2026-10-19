@@ -177,4 +177,6 @@ public sealed class VaultData
 {
     public int Version { get; set; } = 1;
     public List<VaultEntry> Entries { get; set; } = [];
+    /// <summary>Folders the user created ("Work", "Study/Courses"), kept while they hold no entries yet.</summary>
+    public List<string> Folders { get; set; } = [];
 }

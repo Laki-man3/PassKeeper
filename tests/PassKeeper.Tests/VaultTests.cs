@@ -141,6 +141,39 @@ public class VaultTests
     }
 
     [Fact]
+    public void Folders_CreatedMovedRenamedDeleted()
+    {
+        using var dir = new TempDir();
+        var vault = new VaultService(dir.Path);
+        vault.Create("user", "Correct-Horse-9");
+        var a = new VaultEntry { Title = "A", Password = "1" };
+        var b = new VaultEntry { Title = "B", Password = "2", Folder = "Work/Mail" };
+        vault.AddRange([a, b]);
+
+        // An empty folder is kept until something goes into it.
+        Assert.Equal("Study", vault.AddFolder(" Study / "));
+        Assert.Equal(["Study", "Work/Mail"], vault.Folders());
+        Assert.Null(vault.AddFolder("  "));
+
+        Assert.Equal(1, vault.MoveToFolder([a.Id], "Study"));
+        Assert.Equal("Study", vault.Find(a.Id)!.Folder);
+
+        // Renaming takes the subfolders and their entries along.
+        vault.RenameFolder("Work", "Job");
+        Assert.Equal("Job/Mail", vault.Find(b.Id)!.Folder);
+        Assert.Equal(["Job/Mail", "Study"], vault.Folders());
+
+        // Deleting a folder keeps its entries, outside any folder.
+        Assert.Equal(1, vault.DeleteFolder("Study"));
+        Assert.Equal("", vault.Find(a.Id)!.Folder);
+        Assert.Equal(2, vault.ActiveEntries.Count());
+
+        var reopened = new VaultService(dir.Path);
+        reopened.UnlockWithMaster("Correct-Horse-9");
+        Assert.Equal(["Job/Mail"], reopened.Folders());
+    }
+
+    [Fact]
     public void SelectedEntries_ChangedTogether_WithOneSave()
     {
         using var dir = new TempDir();

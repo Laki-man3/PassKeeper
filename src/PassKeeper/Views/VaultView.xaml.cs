@@ -91,7 +91,7 @@ public partial class VaultView : UserControl
     {
         var active = Vault.ActiveEntries.ToList();
         var folders = new SortedSet<string>(StringComparer.CurrentCultureIgnoreCase);
-        foreach (var f in active.Select(e => e.Folder.Trim().Trim('/')).Where(f => f.Length > 0))
+        foreach (var f in Vault.Folders())
         {
             var parts = f.Split('/');
             for (var i = 1; i <= parts.Length; i++) folders.Add(string.Join("/", parts.Take(i)));
@@ -114,7 +114,7 @@ public partial class VaultView : UserControl
                 Count = active.Count(e => e.EffectiveCategory == category),
             });
         }
-        if (folders.Count > 0)
+        // Folders are always offered: entries are dragged into them, a new one is made here.
         {
             items.Add(new NavItem { Kind = NavKind.Header, Label = Loc.T("Nav.Folders").ToUpperInvariant() });
             foreach (var f in folders)
@@ -130,6 +130,7 @@ public partial class VaultView : UserControl
                     Count = active.Count(e => InFolder(e, f)),
                 });
             }
+            items.Add(new NavItem { Kind = NavKind.NewFolder, Icon = "\uE710", Label = Loc.T("Nav.NewFolder") });
         }
         items.Add(new NavItem { Kind = NavKind.Separator });
         items.Add(new NavItem { Kind = NavKind.Trash, Icon = "\uE74D", Label = Loc.T("Nav.Trash"), Count = Vault.Data.Entries.Count(e => e.IsDeleted) });
@@ -187,6 +188,7 @@ public partial class VaultView : UserControl
         EntryList.ItemsSource = result;
         foreach (var item in result.Where(i => selectedIds.Contains(i.Id))) EntryList.SelectedItems.Add(item);
         _suppressSelection = false;
+        if (_selectionMode && EntryList.SelectedItems.Count == 0) SetSelectionMode(false);
         UpdateSelectionMarks();
         // The selected entries that left the list (moved to the trash, filtered out) leave the selection too.
         if (DetailHost.Content is BulkActionsView) ShowSelection();
@@ -241,7 +243,22 @@ public partial class VaultView : UserControl
 
     private EntryItem? Selected => EntryList.SelectedItem as EntryItem;
 
-    private bool IsMultiple => EntryList.SelectedItems.Count > 1;
+    /// <summary>
+    /// Entries are being selected: a click on an entry adds it to the selection or takes it out (the list is in
+    /// multiple selection), and the right pane shows what can be done with all of them. Started by the round check on
+    /// an entry, "Select all", or Ctrl/Shift+click; ends when nothing is selected any more.
+    /// </summary>
+    private bool _selectionMode;
+
+    private bool IsMultiple => _selectionMode || EntryList.SelectedItems.Count > 1;
+
+    private void SetSelectionMode(bool on)
+    {
+        if (_selectionMode == on) return;
+        _selectionMode = on;
+        EntryList.SelectionMode = on ? SelectionMode.Multiple : SelectionMode.Extended;
+        UpdateSelectionMarks();
+    }
 
     /// <summary>The selected entries in the order of the list.</summary>
     private List<EntryItem> SelectedItems()
@@ -262,6 +279,9 @@ public partial class VaultView : UserControl
     {
         UpdateSelectionMarks();
         if (_suppressSelection) return;
+        // Ctrl/Shift+click picked a second entry: from now on a click picks one more; nothing left: back to browsing.
+        if (!_selectionMode && EntryList.SelectedItems.Count > 1) SetSelectionMode(true);
+        else if (_selectionMode && EntryList.SelectedItems.Count == 0) SetSelectionMode(false);
         if (!await ConfirmLeaveEditorAsync())
         {
             _suppressSelection = true;
@@ -278,7 +298,7 @@ public partial class VaultView : UserControl
     private void ShowSelection()
     {
         var items = SelectedItems();
-        if (items.Count > 1) ShowBulk(items);
+        if (items.Count > 1 || _selectionMode && items.Count == 1) ShowBulk(items);
         else if (items.Count == 1) ShowDetails(items[0].Entry);
         else ShowEmptyDetails();
     }
@@ -291,7 +311,7 @@ public partial class VaultView : UserControl
     {
         var count = EntryList.SelectedItems.Count;
         var total = EntryList.Items.Count;
-        EntryList.Tag = count > 1 ? "multi" : null;
+        EntryList.Tag = _selectionMode || count > 1 ? "multi" : null;
         SelectAllBox.Visibility = total > 1 ? Visibility.Visible : Visibility.Collapsed;
         _syncingSelectAll = true;
         SelectAllBox.IsChecked = count > 1 && count == total ? true : count > 1 ? null : false;
@@ -310,6 +330,7 @@ public partial class VaultView : UserControl
 
     private void SelectAllEntries()
     {
+        SetSelectionMode(true);
         EntryList.SelectAll();
         UpdateSelectionMarks();
     }
@@ -320,12 +341,210 @@ public partial class VaultView : UserControl
         UpdateSelectionMarks();
     }
 
-    private void SelectMark_MouseDown(object sender, MouseButtonEventArgs e)
+    /// <summary>
+    /// The round check on an entry: starts selecting with this entry (the one only looked at before is not kept
+    /// unless it is this one), or adds the entry to the selection / takes it out.
+    /// </summary>
+    private void ToggleSelected(EntryItem item)
     {
-        if ((sender as FrameworkElement)?.DataContext is not EntryItem item) return;
+        if (!_selectionMode)
+        {
+            var keep = EntryList.SelectedItems.Contains(item);
+            _suppressSelection = true;
+            SetSelectionMode(true);
+            if (!keep)
+            {
+                EntryList.UnselectAll();
+                EntryList.SelectedItems.Add(item);
+            }
+            _suppressSelection = false;
+            UpdateSelectionMarks();
+            ShowSelection();
+            return;
+        }
         if (EntryList.SelectedItems.Contains(item)) EntryList.SelectedItems.Remove(item);
         else EntryList.SelectedItems.Add(item);
+    }
+
+    /// <summary>The round check as a button (keyboard, screen readers); a mouse press is handled on the list first.</summary>
+    private void AvatarSlot_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is EntryItem item) ToggleSelected(item);
+    }
+
+    // ------------------------------------------------------------------ dragging entries to folders
+
+    private const string EntryIdsFormat = "PassKeeper.EntryIds";
+    private Point _dragStart;
+    private EntryItem? _dragItem;
+    private EntryItem? _pendingClick;
+
+    private static T? Up<T>(object? source) where T : DependencyObject
+    {
+        for (var d = source as DependencyObject; d != null; d = System.Windows.Media.VisualTreeHelper.GetParent(d) ?? LogicalTreeHelper.GetParent(d))
+            if (d is T found) return found;
+        return null;
+    }
+
+    private static bool InAvatarSlot(object? source)
+    {
+        for (var d = source as DependencyObject; d != null && d is not ListBoxItem; d = System.Windows.Media.VisualTreeHelper.GetParent(d))
+            if (d is FrameworkElement { Name: "AvatarSlot" }) return true;
+        return false;
+    }
+
+    /// <summary>
+    /// A press on an entry: on its round check it selects; on an entry that is part of a selection the selection is
+    /// kept (it may be dragged), and the click is applied when the button is released without dragging.
+    /// </summary>
+    private void EntryList_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        _dragItem = null;
+        _pendingClick = null;
+        if (Up<ListBoxItem>(e.OriginalSource) is not { DataContext: EntryItem item } container) return;
+        if (InAvatarSlot(e.OriginalSource))
+        {
+            ToggleSelected(item);
+            e.Handled = true;
+            return;
+        }
+        if (Keyboard.Modifiers != ModifierKeys.None) return;
+        _dragStart = e.GetPosition(EntryList);
+        _dragItem = item;
+        if (container.IsSelected && (EntryList.SelectedItems.Count > 1 || _selectionMode))
+        {
+            _pendingClick = item;
+            e.Handled = true;
+        }
+    }
+
+    private void EntryList_PreviewMouseUp(object sender, MouseButtonEventArgs e)
+    {
+        var item = _pendingClick;
+        _pendingClick = null;
+        _dragItem = null;
+        if (item == null) return;
+        // A plain click on a selected entry: taken out of the selection while selecting, otherwise shown alone.
+        if (_selectionMode) EntryList.SelectedItems.Remove(item);
+        else EntryList.SelectedItem = item;
+    }
+
+    private void EntryList_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (_dragItem == null || e.LeftButton != MouseButtonState.Pressed || _currentNav?.Kind == NavKind.Trash) return;
+        var at = e.GetPosition(EntryList);
+        if (Math.Abs(at.X - _dragStart.X) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(at.Y - _dragStart.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+        var item = _dragItem;
+        _dragItem = null;
+        _pendingClick = null;
+        // The whole selection when the entry is part of it, otherwise this entry alone.
+        var ids = EntryList.SelectedItems.Contains(item) ? SelectedItems().Select(i => i.Id).ToArray() : [item.Id];
+        DragDrop.DoDragDrop(EntryList, new DataObject(EntryIdsFormat, ids), DragDropEffects.Move);
+        SetDropTarget(null);
+    }
+
+    private NavItem? _dropTarget;
+
+    private void SetDropTarget(NavItem? nav)
+    {
+        if (ReferenceEquals(_dropTarget, nav)) return;
+        if (_dropTarget != null) _dropTarget.IsDropTarget = false;
+        _dropTarget = nav;
+        if (nav != null) nav.IsDropTarget = true;
+    }
+
+    private void NavList_DragOver(object sender, DragEventArgs e)
+    {
+        var nav = e.Data.GetDataPresent(EntryIdsFormat) ? Up<ListBoxItem>(e.OriginalSource)?.DataContext as NavItem : null;
+        var accepts = nav is { AcceptsEntries: true } && !(nav.Kind == NavKind.Folder && _currentNav?.Kind == NavKind.Folder && nav.Folder == _currentNav.Folder);
+        SetDropTarget(accepts ? nav : null);
+        e.Effects = accepts ? DragDropEffects.Move : DragDropEffects.None;
         e.Handled = true;
+    }
+
+    private void NavList_DragLeave(object sender, DragEventArgs e) => SetDropTarget(null);
+
+    /// <summary>Entries dropped on a folder go into it, on favorites become favorites, on the trash go there.</summary>
+    private async void NavList_Drop(object sender, DragEventArgs e)
+    {
+        var nav = _dropTarget;
+        SetDropTarget(null);
+        if (nav == null || e.Data.GetData(EntryIdsFormat) is not Guid[] ids || ids.Length == 0) return;
+        e.Handled = true;
+        var what = Loc.Plural(ids.Length, "Plural.Entries");
+        switch (nav.Kind)
+        {
+            case NavKind.Folder:
+                Vault.MoveToFolder(ids, nav.Folder);
+                App.Instance.Main.ShowToast(Loc.F("Folder.MovedTo", nav.Folder.Replace("/", " / "), what));
+                break;
+            case NavKind.NewFolder:
+                if (await AskFolderNameAsync() is not { } folder) return;
+                Vault.MoveToFolder(ids, folder);
+                App.Instance.Main.ShowToast(Loc.F("Folder.MovedTo", folder.Replace("/", " / "), what));
+                break;
+            case NavKind.Favorites:
+                Vault.SetFavorite(ids, true);
+                App.Instance.Main.ShowToast(Loc.F("Bulk.Favorited", what));
+                break;
+            case NavKind.Trash:
+                if (ids.Length > 1 && !await ConfirmDialog.AskAsync(Loc.T("Bulk.DeleteTitle"), Loc.F("Bulk.DeleteText", what), Loc.T("Common.Delete"), danger: true))
+                    return;
+                Vault.MoveToTrash(ids);
+                App.Instance.Main.ShowToast(Loc.F("Bulk.MovedToTrash", what));
+                break;
+        }
+    }
+
+    // ------------------------------------------------------------------ folders
+
+    /// <summary>Asks for the name of a new folder and creates it. Returns its name, or null when cancelled.</summary>
+    private async Task<string?> AskFolderNameAsync()
+    {
+        var name = await TextPromptDialog.AskAsync(Loc.T("Folder.NewTitle"), Loc.T("Folder.NewText"), Loc.T("Folder.Create"));
+        return name == null ? null : Vault.AddFolder(name);
+    }
+
+    private async void CreateFolder()
+    {
+        if (await AskFolderNameAsync() is not { } folder) return;
+        _currentNav = new NavItem { Kind = NavKind.Folder, Folder = folder };
+        Reload();
+        App.Instance.Main.ShowToast(Loc.F("Folder.Created", folder));
+    }
+
+    /// <summary>Right click on a folder: rename it or delete it (its entries stay, outside the folder).</summary>
+    private void NavList_RightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (Up<ListBoxItem>(e.OriginalSource)?.DataContext is not NavItem { Kind: NavKind.Folder } nav) return;
+        e.Handled = true;
+        var menu = new ContextMenu();
+        MenuItem Item(string icon, string text, Action click)
+        {
+            var item = new MenuItem { Header = text, Icon = new TextBlock { Text = icon } };
+            item.Click += (_, _) => click();
+            return item;
+        }
+        menu.Items.Add(Item("\uE8AC", Loc.T("Folder.Rename"), async () =>
+        {
+            var parent = nav.Folder.Contains('/') ? nav.Folder[..nav.Folder.LastIndexOf('/')] + "/" : "";
+            var current = nav.Folder[parent.Length..];
+            if (await TextPromptDialog.AskAsync(Loc.T("Folder.RenameTitle"), Loc.F("Folder.RenameText", current), Loc.T("Common.Save"), current) is not { } name) return;
+            Vault.RenameFolder(nav.Folder, parent + name);
+            _currentNav = new NavItem { Kind = NavKind.Folder, Folder = VaultService.NormalizeFolder(parent + name) };
+            Reload();
+        }));
+        menu.Items.Add(Item("\uE74D", Loc.T("Folder.Delete"), async () =>
+        {
+            var count = Vault.ActiveEntries.Count(x => InFolder(x, nav.Folder));
+            if (!await ConfirmDialog.AskAsync(Loc.F("Folder.DeleteTitle", nav.Folder.Replace("/", " / ")), Loc.F("Folder.DeleteText", Loc.Plural(count, "Plural.Entries")), Loc.T("Folder.Delete"), danger: true))
+                return;
+            Vault.DeleteFolder(nav.Folder);
+            App.Instance.Main.ShowToast(Loc.T("Folder.Deleted"));
+        }));
+        menu.PlacementTarget = NavList;
+        menu.IsOpen = true;
     }
 
     private void ShowBulk(List<EntryItem> items)
@@ -599,11 +818,12 @@ public partial class VaultView : UserControl
     private async void NavList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_suppressSelection || NavList.SelectedItem is not NavItem nav) return;
-        if (nav.IsHeader)
+        if (nav.IsHeader || nav.Kind == NavKind.NewFolder)
         {
             _suppressSelection = true;
             NavList.SelectedItem = _currentNav;
             _suppressSelection = false;
+            if (nav.Kind == NavKind.NewFolder) CreateFolder();
             return;
         }
         if (!await ConfirmLeaveEditorAsync())
