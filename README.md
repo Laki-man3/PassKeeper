@@ -95,7 +95,7 @@ Chrome 127+ protects newly saved passwords with App-Bound Encryption, which thir
 ### Installation
 
 ```bat
-PassKeeper-Setup-1.5.0.exe
+PassKeeper-Setup-1.5.1.exe
 ```
 
 | Mode | Location | Rights |
@@ -109,7 +109,7 @@ The autostart and language chosen in the installer are used on the first run.
 Silent install: `/S`, `/allusers` or `/currentuser`, `/desktop`, `/autostart` or `/noautostart`, `/nolaunch`, `"/dir=path"`, `/lang=en|ru`. Exit codes: 0 ok, 1 error, 740 elevation required, 1602 cancelled.
 
 ```bat
-PassKeeper-Setup-1.5.0.exe /S /allusers /desktop /autostart
+PassKeeper-Setup-1.5.1.exe /S /allusers /desktop /autostart
 ```
 
 ### Uninstall
@@ -237,7 +237,7 @@ Chrome 127+ шифрует новые пароли App-Bound Encryption, нед�
 ### Установка
 
 ```bat
-PassKeeper-Setup-1.5.0.exe
+PassKeeper-Setup-1.5.1.exe
 ```
 
 | Режим | Папка | Права |
@@ -251,7 +251,7 @@ PassKeeper-Setup-1.5.0.exe
 Тихая установка: `/S`, `/allusers` или `/currentuser`, `/desktop`, `/autostart` или `/noautostart`, `/nolaunch`, `"/dir=путь"`, `/lang=ru|en`. Коды возврата: 0 — успех, 1 — ошибка, 740 — нужны права администратора, 1602 — отменено.
 
 ```bat
-PassKeeper-Setup-1.5.0.exe /S /allusers /desktop /autostart
+PassKeeper-Setup-1.5.1.exe /S /allusers /desktop /autostart
 ```
 
 ### Удаление
