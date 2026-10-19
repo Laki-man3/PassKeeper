@@ -108,7 +108,7 @@ public sealed class AutoLoginService
     /// <summary>The auto sign-in entry for the window; several accounts of one client are told apart by the server in the title.</summary>
     private VaultEntry? Pick(TargetWindow target)
     {
-        var matches = EntryMatcher.Match(_app.Vault.ActiveEntries.Where(e => e.AutoLogin), target.ToContext())
+        var matches = EntryMatcher.Match(_app.Vault.ActiveEntries.Where(e => e.SignsInToProgram), target.ToContext())
             .Where(m => m.Score >= 95)
             .ToList();
         if (matches.Count == 1) return matches[0].Entry;
@@ -166,7 +166,8 @@ public sealed class AutoLoginService
         if (!_app.Vault.IsUnlocked) return;
         var triggers = new SortedSet<string>(StringComparer.Ordinal);
         _autoEntries = 0;
-        foreach (var e in _app.Vault.ActiveEntries.Where(e => e.AutoLogin))
+        // Site entries sign in through autofill (AutoTypeService), not by watching windows.
+        foreach (var e in _app.Vault.ActiveEntries.Where(e => e.SignsInToProgram))
         {
             _autoEntries++;
             if (KnownApps.ForPatterns(e.WindowPatterns) is { } app) triggers.Add(app.Id);

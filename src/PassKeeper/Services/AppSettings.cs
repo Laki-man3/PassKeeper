@@ -28,9 +28,15 @@ public sealed class AppSettings
     public bool AutoFillLog { get; set; }
     /// <summary>Sign in automatically to clients whose entries have auto sign-in enabled.</summary>
     public bool AutoLogin { get; set; } = true;
+    /// <summary>Submit a site's sign-in form after filling it in, for site entries with auto sign-in enabled.</summary>
+    public bool AutoLoginWeb { get; set; } = true;
     /// <summary>Known client ids / executable names that have auto sign-in entries (read while the vault is locked).</summary>
     public List<string> AutoLoginTriggers { get; set; } = [];
     public bool SubmitAfterFill { get; set; }
+    /// <summary>After the user signs in by hand on a site without an entry, offer to save one (nothing is read from the form).</summary>
+    public bool OfferToSave { get; set; } = true;
+    /// <summary>Sites (host names) where saving a sign-in is not offered.</summary>
+    public List<string> NeverSaveSites { get; set; } = [];
     public int KeystrokeDelayMs { get; set; } = 8;
     public bool CompatibleTyping { get; set; }
     public bool MinimizeToTray { get; set; } = true;

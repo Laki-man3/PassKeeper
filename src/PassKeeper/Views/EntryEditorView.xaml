@@ -121,13 +121,6 @@
                     </StackPanel>
                 </Grid>
 
-                <CheckBox x:Name="AutoLoginBox" Style="{StaticResource Toggle}" Margin="0,16,0,0" Click="Any_Changed">
-                    <StackPanel>
-                        <TextBlock Text="{l:T Editor.AutoLogin}" />
-                        <TextBlock Style="{StaticResource Text.Muted}" Text="{l:T Editor.AutoLoginHint}" TextWrapping="Wrap" />
-                    </StackPanel>
-                </CheckBox>
-
                 <!-- site -->
                 <StackPanel x:Name="WebPanel">
                     <TextBlock Style="{StaticResource Text.Label}" Margin="0,14,0,6" Text="{l:T Field.Website}" />
@@ -140,6 +133,14 @@
                         <TextBlock Style="{StaticResource Text.Muted}" Margin="0,6,0,0" TextWrapping="Wrap" Text="{l:T Editor.ExtraUrlsHelp}" />
                     </StackPanel>
                 </StackPanel>
+
+                <!-- a client signs in when its window appears, a site when its form is filled in by itself -->
+                <CheckBox x:Name="AutoLoginBox" Style="{StaticResource Toggle}" Margin="0,16,0,0" Click="Any_Changed">
+                    <StackPanel>
+                        <TextBlock Text="{l:T Editor.AutoLogin}" />
+                        <TextBlock x:Name="AutoLoginHint" Style="{StaticResource Text.Muted}" TextWrapping="Wrap" />
+                    </StackPanel>
+                </CheckBox>
 
                 <Grid x:Name="ContactRow" Margin="0,14,0,0" c:UI.StackBelow="430">
                     <Grid.ColumnDefinitions>
@@ -207,7 +208,15 @@
                             <TextBlock Style="{StaticResource Text.Secondary}" FontSize="12.5" Margin="0,8,0,0" TextWrapping="Wrap" Text="{l:T Editor.HowItWorks}" />
 
                             <TextBlock Style="{StaticResource Text.Label}" Margin="0,16,0,6" Text="{l:T Field.Sequence}" />
-                            <TextBox x:Name="SequenceBox" FontFamily="{StaticResource Font.Mono}" c:UI.Placeholder="{l:T Editor.SequencePlaceholder}" TextChanged="Any_Changed" />
+                            <!-- the sequence as elements, each removed by its cross; as plain text on request -->
+                            <Border Style="{StaticResource Card}" Padding="8,8,2,2" MinHeight="42">
+                                <WrapPanel x:Name="SequenceChips" />
+                            </Border>
+                            <TextBlock x:Name="SequenceNote" Style="{StaticResource Text.Muted}" Margin="0,6,0,0" TextWrapping="Wrap" />
+                            <TextBox x:Name="SequenceBox" FontFamily="{StaticResource Font.Mono}" c:UI.Placeholder="{l:T Editor.SequencePlaceholder}" TextChanged="Any_Changed"
+                                     Margin="0,8,0,0" Visibility="Collapsed" />
+                            <Button x:Name="SequenceTextToggle" Style="{StaticResource Btn.Link}" HorizontalAlignment="Left" Margin="-8,2,0,0" c:UI.Icon="&#xE70F;"
+                                    Content="{l:T Editor.SequenceAsText}" Click="SequenceTextToggle_Click" />
                             <TextBlock Style="{StaticResource Text.Muted}" Margin="0,6,0,8" TextWrapping="Wrap" Text="{l:T Editor.SequenceHelp}" />
                             <WrapPanel x:Name="PlaceholderChips" />
                             <TextBlock Style="{StaticResource Text.Label}" Margin="0,8,0,6" Text="{l:T Editor.Examples}" />

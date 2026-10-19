@@ -107,12 +107,24 @@ internal static class DevScreens
         settings.SidebarWidth = sidebarWidth;
         settings.ListWidth = listWidth;
         main.Width = 1240;
+
+        // All entries of a section selected at once: what can be done with all of them.
+        var nav = (System.Windows.Controls.ListBox)vault.FindName("NavList");
+        nav.SelectedItem = nav.Items.Cast<ViewModels.NavItem>().First(n => n.Kind == ViewModels.NavKind.Category && n.Category == EntryCategory.Remote);
+        await Task.Delay(100);
+        list.SelectAll();
+        await Snap(main, dir, $"05d-vault-bulk-{suffix}");
+        nav.SelectedIndex = 0;
+        await Task.Delay(100);
         list.SelectedIndex = 1;
 
         var details = (System.Windows.Controls.ContentControl)vault.FindName("DetailHost");
         var entry = ((ViewModels.EntryItem)list.SelectedItem).Entry;
         details.Content = new EntryEditorView(entry.Clone(), false, app.Vault.Folders());
         await Snap(main, dir, $"06-editor-{suffix}");
+        var site = app.Vault.ActiveEntries.First(e => e.SignsInToSite);
+        details.Content = new EntryEditorView(site.Clone(), false, app.Vault.Folders());
+        await Snap(main, dir, $"06f-editor-site-autologin-{suffix}");
 
         var vpn = app.Vault.ActiveEntries.First(e => e.EffectiveCategory == EntryCategory.Remote);
         var vpnEditor = new EntryEditorView(vpn.Clone(), false, app.Vault.Folders());
@@ -138,6 +150,14 @@ internal static class DevScreens
         ((System.Windows.Controls.ScrollViewer)about.FindName("Scroll")).ScrollToEnd();
         await Snap(main, dir, $"07b-settings-about-{suffix}");
         about.Close();
+        var autofill = new SettingsDialog();
+        _ = main.ShowDialogAsync(autofill);
+        await Task.Delay(300);
+        var scroll = (System.Windows.Controls.ScrollViewer)autofill.FindName("Scroll");
+        var hotkey = (FrameworkElement)autofill.FindName("Hotkey");
+        scroll.ScrollToVerticalOffset(hotkey.TransformToAncestor(scroll).Transform(new Point(0, 0)).Y - 70);
+        await Snap(main, dir, $"07c-settings-autofill-{suffix}");
+        autofill.Close();
         await Dialog(main, new GeneratorDialog(pickMode: false), dir, $"08-generator-{suffix}");
         await Dialog(main, new ImportDialog(), dir, $"09-import-{suffix}");
         await Dialog(main, new ExportDialog(), dir, $"10-export-{suffix}");
@@ -199,7 +219,8 @@ internal static class DevScreens
         new() { Title = "Check Point Endpoint Security VPN", Username = "amorgan", Password = "Vpn!Office#77", Folder = "Work", Category = EntryCategory.Remote,
             WindowPatterns = ["TrGUI.exe", "Check Point*"], CustomFields = [new CustomField { Name = "PIN", Value = "246810", Protected = true }] },
         new() { Title = "Online banking", Username = "alex_m", Password = "qwerty123", Url = "https://bank.example.com", Folder = "Finance", Favorite = true },
-        new() { Title = "GitLab (corporate)", Username = "a.morgan", Password = "Tr0ub4dor&3", Url = "https://gitlab.corp.local", Folder = "Work", SecretKey = "glpat-xxxxxxxxxxxxxxxxxxxx" },
+        new() { Title = "GitLab (corporate)", Username = "a.morgan", Password = "Tr0ub4dor&3", Url = "https://gitlab.corp.local", Folder = "Work", SecretKey = "glpat-xxxxxxxxxxxxxxxxxxxx",
+            Category = EntryCategory.Web, AutoLogin = true },
         new() { Title = "Personal mail", Username = "alex.morgan@example.com", Password = "Gu$-2026-secure!", Url = "https://mail.example.com", Folder = "Personal", Email = "alex.morgan@example.com" },
         new() { Title = "Remote desktop", Username = @"CORP\amorgan", Password = "Rdp-Desk-2026", Folder = "Work", WindowPatterns = ["mstsc"] },
         new() { Title = "Home Wi-Fi", Password = "HomeNet-5G-2026", Notes = "SSID: Morgan_5G", Folder = "Personal" },
@@ -213,7 +234,8 @@ internal static class DevScreens
             new() { Title = "Госуслуги", Username = "+7 912 345-67-89", Password = "Gu$-2026-secure!", Url = "https://esia.gosuslugi.ru", Folder = "Личное", Favorite = true, Phone = "+7 912 345-67-89" },
             new() { Title = "Почта Яндекс", Username = "anna.petrova@yandex.ru", Password = "k7#Qm2!vRz9@Lp4x", Url = "https://passport.yandex.ru", Folder = "Личное", Email = "anna.petrova@yandex.ru",
                 Totp = "JBSWY3DPEHPK3PXP", Notes = "Резервные коды лежат в сейфе.", CustomFields = [new CustomField { Name = "Секретный вопрос", Value = "Барсик", Protected = true }] },
-            new() { Title = "GitLab (корпоративный)", Username = "a.petrova", Password = "Tr0ub4dor&3", Url = "https://gitlab.corp.local", Folder = "Работа", SecretKey = "glpat-xxxxxxxxxxxxxxxxxxxx" },
+            new() { Title = "GitLab (корпоративный)", Username = "a.petrova", Password = "Tr0ub4dor&3", Url = "https://gitlab.corp.local", Folder = "Работа", SecretKey = "glpat-xxxxxxxxxxxxxxxxxxxx",
+                Category = EntryCategory.Web, AutoLogin = true },
             new() { Title = "1С:Предприятие", Username = "Петрова А.", Password = "1c-Buh-2026", Folder = "Работа", WindowPatterns = ["*1С:Предприятие*"] },
             new() { Title = "Сбербанк Онлайн", Username = "anna_p", Password = "qwerty123", Url = "https://online.sberbank.ru", Folder = "Финансы", Favorite = true },
             new() { Title = "Cisco Secure Client (AnyConnect)", Username = "apetrova", Password = "Vpn!Office#77", Url = "vpn.corp.local", Folder = "Работа",

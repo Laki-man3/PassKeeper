@@ -86,6 +86,9 @@ public sealed class SuggestionPopup : Window
     public event Action<LoginField>? UnlockRequested;
     public event Action<LoginField>? CreateRequested;
     public event Action<LoginField, TargetWindow>? ChooseRequested;
+    public event Action<LoginField, TargetWindow>? CreateSiteRequested;
+    public event Action<string, string>? SaveRequested;
+    public event Action<string>? NeverSaveRequested;
 
     /// <summary>The card belongs to a field of this window.</summary>
     public bool IsFor(IntPtr window) => _field != null && _field.Window == window;
@@ -159,11 +162,33 @@ public sealed class SuggestionPopup : Window
         Present(field.Bounds);
     }
 
-    /// <summary>A site without entries: any entry can be used (and remembered for the site).</summary>
+    /// <summary>
+    /// A site without entries: a new entry can be created for it (its form's fields make the entry's sequence, and the
+    /// form is filled after saving), or any existing entry used (and remembered for the site).
+    /// </summary>
     public void ShowChoose(LoginField field, TargetWindow target)
     {
         _field = field;
         _items.Children.Clear();
+        var site = Core.Matching.DomainUtil.GetHost(target.Url) ?? target.Describe();
+        var create = ItemShell(out var createPanel);
+        var plus = new TextBlock { Text = "\uE710", Style = (Style)FindResource("Icon"), FontSize = 16, Width = 30 };
+        plus.SetResourceReference(TextBlock.ForegroundProperty, "Brush.AccentText");
+        createPanel.Children.Add(plus);
+        var createText = new StackPanel { Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, MaxWidth = 230 };
+        createText.Children.Add(new TextBlock { Text = Loc.F("Suggest.CreateSite", site), FontWeight = FontWeights.SemiBold, FontSize = 12.5, TextWrapping = TextWrapping.Wrap });
+        var createHint = new TextBlock { Text = Loc.T("Suggest.CreateSiteHint"), FontSize = 11.5, TextWrapping = TextWrapping.Wrap };
+        createHint.SetResourceReference(TextBlock.ForegroundProperty, "Brush.TextMuted");
+        createText.Children.Add(createHint);
+        createPanel.Children.Add(createText);
+        System.Windows.Automation.AutomationProperties.SetAutomationId(create, "CreateSiteEntry");
+        create.Click += (_, _) =>
+        {
+            var f = _field;
+            HidePopup();
+            if (f != null) CreateSiteRequested?.Invoke(f, target);
+        };
+        _items.Children.Add(create);
         var button = ItemShell(out var panel);
         var icon = new TextBlock { Text = "\uE721", Style = (Style)FindResource("Icon"), FontSize = 16, Width = 30 };
         icon.SetResourceReference(TextBlock.ForegroundProperty, "Brush.AccentText");
@@ -186,8 +211,46 @@ public sealed class SuggestionPopup : Window
         Present(field.Bounds);
     }
 
+    /// <summary>
+    /// After a sign-in done by hand on a site without an entry: offers to save one. Shown at the top right of the
+    /// browser window; the entry is filled in by the user in PassKeeper.
+    /// </summary>
+    public void ShowSaveOffer(IntPtr window, string host, string address)
+    {
+        _field = null;
+        _items.Children.Clear();
+        var text = new TextBlock { Text = Loc.F("Suggest.SaveTitle", host), FontWeight = FontWeights.SemiBold, FontSize = 12.5, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(8, 0, 8, 4) };
+        var hint = new TextBlock { Text = Loc.T("Suggest.SaveHint"), FontSize = 11.5, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(8, 0, 8, 8) };
+        hint.SetResourceReference(TextBlock.ForegroundProperty, "Brush.TextMuted");
+        _items.Children.Add(text);
+        _items.Children.Add(hint);
+        var buttons = new WrapPanel { Margin = new Thickness(8, 0, 8, 4) };
+        Button Action(string id, string style, string content, Action click)
+        {
+            var b = new Button { Style = (Style)FindResource(style), Content = content, Focusable = false, Margin = new Thickness(0, 0, 6, 6) };
+            System.Windows.Automation.AutomationProperties.SetAutomationId(b, id);
+            b.Click += (_, _) =>
+            {
+                HidePopup();
+                click();
+            };
+            return b;
+        }
+        buttons.Children.Add(Action("SaveSignIn", "Btn.Primary", Loc.T("Suggest.Save"), () => SaveRequested?.Invoke(host, address)));
+        buttons.Children.Add(Action("NotNow", "Btn.Ghost", Loc.T("Suggest.NotNow"), () => { }));
+        buttons.Children.Add(Action("NeverForSite", "Btn.Ghost", Loc.T("Suggest.Never"), () => NeverSaveRequested?.Invoke(host)));
+        _items.Children.Add(buttons);
+        _subtitle.Text = host;
+        _footer.Text = "";
+        // A place at the top right of the browser window, under its toolbar.
+        if (!Native.GetWindowRect(window, out var r)) return;
+        Present(new Rect(r.Right - 400, r.Top + 60, 1, 1));
+        _autoHide.Interval = TimeSpan.FromSeconds(45);
+    }
+
     public void HidePopup()
     {
+        _autoHide.Interval = TimeSpan.FromSeconds(20);
         _autoHide.Stop();
         _field = null;
         _target = null;

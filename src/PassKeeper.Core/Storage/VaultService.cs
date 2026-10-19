@@ -269,6 +269,37 @@ public sealed class VaultService
         Save();
     }
 
+    // ---- several entries at once (a selection in the list): one save for all of them ---------------------------
+
+    public int MoveToTrash(IEnumerable<Guid> ids) => MutateMany(ids, e => e.DeletedUtc = DateTime.UtcNow);
+    public int Restore(IEnumerable<Guid> ids) => MutateMany(ids, e => e.DeletedUtc = null);
+    public int SetFavorite(IEnumerable<Guid> ids, bool favorite) => MutateMany(ids, e => e.Favorite = favorite);
+
+    public int DeletePermanently(IEnumerable<Guid> ids)
+    {
+        RequireUnlocked();
+        var set = ids.ToHashSet();
+        var n = Data.Entries.RemoveAll(e => set.Contains(e.Id));
+        if (n > 0) Save();
+        return n;
+    }
+
+    private int MutateMany(IEnumerable<Guid> ids, Action<VaultEntry> change)
+    {
+        RequireUnlocked();
+        var set = ids.ToHashSet();
+        var now = DateTime.UtcNow;
+        var changed = 0;
+        foreach (var entry in Data.Entries.Where(e => set.Contains(e.Id)))
+        {
+            change(entry);
+            entry.ModifiedUtc = now;
+            changed++;
+        }
+        if (changed > 0) Save();
+        return changed;
+    }
+
     public int EmptyTrash()
     {
         RequireUnlocked();

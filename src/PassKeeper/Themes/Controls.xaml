@@ -468,6 +468,12 @@
                             <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
                             <Setter TargetName="Mark" Property="Visibility" Value="Visible" />
                         </Trigger>
+                        <Trigger Property="IsChecked" Value="{x:Null}">
+                            <Setter TargetName="Box" Property="Background" Value="{DynamicResource Brush.Accent}" />
+                            <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+                            <Setter TargetName="Mark" Property="Text" Value="&#xE738;" />
+                            <Setter TargetName="Mark" Property="Visibility" Value="Visible" />
+                        </Trigger>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
                         </Trigger>

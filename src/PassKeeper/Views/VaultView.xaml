@@ -61,7 +61,13 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <c:Avatar SourceText="{Binding AvatarSource}" Size="36" />
+                <c:Avatar x:Name="Av" SourceText="{Binding AvatarSource}" Size="36" />
+                <!-- several entries selected: a round check instead of the avatar; a click on it adds or removes the entry -->
+                <Border x:Name="SelectMark" Width="36" Height="36" CornerRadius="18" BorderThickness="1.5" Visibility="Collapsed"
+                        Background="{DynamicResource Brush.SurfaceAlt}" BorderBrush="{DynamicResource Brush.BorderStrong}"
+                        PreviewMouseLeftButtonDown="SelectMark_MouseDown">
+                    <TextBlock x:Name="SelectCheck" Style="{StaticResource Icon}" Text="&#xE73E;" FontSize="14" Foreground="{DynamicResource Brush.OnAccent}" Visibility="Collapsed" />
+                </Border>
                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0,6,0">
                     <TextBlock Text="{Binding Title}" FontSize="13.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
                     <TextBlock Text="{Binding Subtitle}" FontSize="12" Foreground="{DynamicResource Brush.TextMuted}" TextTrimming="CharacterEllipsis" Margin="0,1,0,0" />
@@ -69,6 +75,17 @@
                 <TextBlock Grid.Column="2" Style="{StaticResource Icon}" Text="&#xE735;" FontSize="12" Foreground="{DynamicResource Brush.Warning}"
                            Visibility="{Binding Favorite, Converter={StaticResource BoolToVis}}" Margin="0,0,4,0" />
             </Grid>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="multi">
+                    <Setter TargetName="Av" Property="Visibility" Value="Collapsed" />
+                    <Setter TargetName="SelectMark" Property="Visibility" Value="Visible" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                    <Setter TargetName="SelectMark" Property="Background" Value="{DynamicResource Brush.Accent}" />
+                    <Setter TargetName="SelectMark" Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+                    <Setter TargetName="SelectCheck" Property="Visibility" Value="Visible" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
         </DataTemplate>
     </UserControl.Resources>
 
@@ -144,19 +161,25 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" MaxWidth="400" />
-                        <ColumnDefinition Width="*" MinWidth="38" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock x:Name="ListTitle" Style="{StaticResource Text.H3}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                    <Border Grid.Column="1" Style="{StaticResource Badge}" Margin="8,0,10,0" HorizontalAlignment="Left">
-                        <TextBlock x:Name="ListCount" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Brush.AccentText}" />
-                    </Border>
+                    <!-- "select all": its box sits over the avatars, the section title over the entry titles -->
+                    <CheckBox x:Name="SelectAllBox" Margin="8,0,13,0" VerticalAlignment="Center" Checked="SelectAll_Toggled" Unchecked="SelectAll_Toggled"
+                              ToolTip="{l:T Bulk.SelectAllTip}" AutomationProperties.Name="{l:T Bulk.SelectAll}" Visibility="Collapsed" />
+                    <!-- the count follows the title; a title that does not fit is shortened, the count stays -->
+                    <DockPanel Grid.Column="1" HorizontalAlignment="Left" Margin="0,0,10,0">
+                        <Border DockPanel.Dock="Right" Style="{StaticResource Badge}" Margin="8,0,0,0" VerticalAlignment="Center">
+                            <TextBlock x:Name="ListCount" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Brush.AccentText}" />
+                        </Border>
+                        <TextBlock x:Name="ListTitle" Style="{StaticResource Text.H3}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                    </DockPanel>
                     <Button x:Name="EmptyTrashButton" Grid.Column="2" Style="{StaticResource Btn.Link}" FontSize="12" Content="{l:T Vault.EmptyTrash}" Click="EmptyTrash_Click" Visibility="Collapsed" />
                     <ComboBox x:Name="SortBox" Grid.Column="2" MinHeight="28" Height="28" FontSize="12" Width="140" SelectionChanged="Sort_SelectionChanged" />
                 </Grid>
                 <Grid>
-                    <ListBox x:Name="EntryList" Style="{StaticResource List.Plain}" ItemContainerStyle="{StaticResource Item.Card}" Padding="0,0,0,12"
+                    <ListBox x:Name="EntryList" Style="{StaticResource List.Plain}" ItemContainerStyle="{StaticResource Item.Card}" Padding="0,0,0,12" SelectionMode="Extended"
                              ItemTemplate="{StaticResource EntryTemplate}" SelectionChanged="EntryList_SelectionChanged"
                              KeyDown="EntryList_KeyDown" MouseDoubleClick="EntryList_MouseDoubleClick">
                         <ListBox.ContextMenu>
@@ -164,13 +187,15 @@
                                 <MenuItem x:Name="MenuCopyUser" Header="{l:T Vault.CopyLogin}" InputGestureText="Ctrl+B" Click="MenuCopyUser_Click"><MenuItem.Icon><TextBlock Text="&#xE77B;" /></MenuItem.Icon></MenuItem>
                                 <MenuItem x:Name="MenuCopyPassword" Header="{l:T Vault.CopyPassword}" InputGestureText="Ctrl+C" Click="MenuCopyPassword_Click"><MenuItem.Icon><TextBlock Text="&#xE8D7;" /></MenuItem.Icon></MenuItem>
                                 <MenuItem x:Name="MenuOpenUrl" Header="{l:T Vault.OpenSite}" Click="MenuOpenUrl_Click"><MenuItem.Icon><TextBlock Text="&#xE774;" /></MenuItem.Icon></MenuItem>
-                                <Separator />
+                                <Separator x:Name="MenuSeparator" />
                                 <MenuItem x:Name="MenuFavorite" Click="MenuFavorite_Click"><MenuItem.Icon><TextBlock Text="&#xE734;" /></MenuItem.Icon></MenuItem>
                                 <MenuItem x:Name="MenuEdit" Header="{l:T Common.Edit}" InputGestureText="Ctrl+E" Click="MenuEdit_Click"><MenuItem.Icon><TextBlock Text="&#xE70F;" /></MenuItem.Icon></MenuItem>
                                 <MenuItem x:Name="MenuDuplicate" Header="{l:T Vault.Duplicate}" Click="MenuDuplicate_Click"><MenuItem.Icon><TextBlock Text="&#xE8C8;" /></MenuItem.Icon></MenuItem>
                                 <MenuItem x:Name="MenuUseForClient" Header="{l:T Vault.UseForClient}" Click="MenuUseForClient_Click"><MenuItem.Icon><TextBlock Text="&#xE705;" /></MenuItem.Icon></MenuItem>
                                 <MenuItem x:Name="MenuRestore" Header="{l:T Vault.Restore}" Click="MenuRestore_Click"><MenuItem.Icon><TextBlock Text="&#xE7A7;" /></MenuItem.Icon></MenuItem>
                                 <MenuItem x:Name="MenuDelete" Header="{l:T Common.Delete}" InputGestureText="Del" Click="MenuDelete_Click"><MenuItem.Icon><TextBlock Text="&#xE74D;" /></MenuItem.Icon></MenuItem>
+                                <Separator x:Name="MenuSelectAllSeparator" />
+                                <MenuItem x:Name="MenuSelectAll" Header="{l:T Bulk.SelectAll}" InputGestureText="Ctrl+A" Click="MenuSelectAll_Click"><MenuItem.Icon><TextBlock Text="&#xE8B3;" /></MenuItem.Icon></MenuItem>
                             </ContextMenu>
                         </ListBox.ContextMenu>
                     </ListBox>

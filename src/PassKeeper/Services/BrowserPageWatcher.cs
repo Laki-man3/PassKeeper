@@ -12,7 +12,7 @@ namespace PassKeeper.Services;
 /// </summary>
 public sealed class BrowserPageWatcher
 {
-    private readonly DispatcherTimer _timer = new(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(600) };
+    private readonly DispatcherTimer _timer = new(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(400) };
     private readonly ConcurrentDictionary<uint, bool> _browsers = new();
     private IntPtr _window;
     private string _title = "";

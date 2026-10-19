@@ -171,7 +171,7 @@ public partial class VaultView : UserControl
 
     private void RefreshList(Guid? select = null)
     {
-        var selectedId = select ?? (EntryList.SelectedItem as EntryItem)?.Id;
+        HashSet<Guid> selectedIds = select is { } id ? [id] : EntryList.SelectedItems.Cast<EntryItem>().Select(i => i.Id).ToHashSet();
         var query = Search.Text.Trim();
         var list = _items.Values.Where(i => MatchesNav(i.Entry) && EntryMatcher.MatchesSearch(i.Entry, query));
         list = _sort switch
@@ -185,8 +185,11 @@ public partial class VaultView : UserControl
 
         _suppressSelection = true;
         EntryList.ItemsSource = result;
-        EntryList.SelectedItem = selectedId.HasValue ? result.FirstOrDefault(i => i.Id == selectedId) : null;
+        foreach (var item in result.Where(i => selectedIds.Contains(i.Id))) EntryList.SelectedItems.Add(item);
         _suppressSelection = false;
+        UpdateSelectionMarks();
+        // The selected entries that left the list (moved to the trash, filtered out) leave the selection too.
+        if (DetailHost.Content is BulkActionsView) ShowSelection();
 
         var isTrash = _currentNav?.Kind == NavKind.Trash;
         ListTitle.Text = _currentNav?.Kind == NavKind.Folder ? _currentNav.Folder.Split('/').Last() : _currentNav?.Label.Trim() ?? "";
@@ -194,6 +197,7 @@ public partial class VaultView : UserControl
         EmptyTrashButton.Visibility = isTrash && result.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         SortBox.Visibility = isTrash ? Visibility.Collapsed : Visibility.Visible;
         ClearSearch.Visibility = query.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+        ArrangeListHeader();
 
         EmptyState.Visibility = result.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         if (result.Count == 0)
@@ -237,6 +241,15 @@ public partial class VaultView : UserControl
 
     private EntryItem? Selected => EntryList.SelectedItem as EntryItem;
 
+    private bool IsMultiple => EntryList.SelectedItems.Count > 1;
+
+    /// <summary>The selected entries in the order of the list.</summary>
+    private List<EntryItem> SelectedItems()
+    {
+        var selected = EntryList.SelectedItems.Cast<EntryItem>().ToHashSet();
+        return EntryList.Items.Cast<EntryItem>().Where(selected.Contains).ToList();
+    }
+
     public void ShowEmptyDetails() => DetailHost.Content = new EmptyDetailsView();
 
     private async Task<bool> ConfirmLeaveEditorAsync()
@@ -247,16 +260,124 @@ public partial class VaultView : UserControl
 
     private async void EntryList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        UpdateSelectionMarks();
         if (_suppressSelection) return;
         if (!await ConfirmLeaveEditorAsync())
         {
             _suppressSelection = true;
-            EntryList.SelectedItem = e.RemovedItems.Count > 0 ? e.RemovedItems[0] : null;
+            foreach (var added in e.AddedItems) EntryList.SelectedItems.Remove(added);
+            foreach (var removed in e.RemovedItems) EntryList.SelectedItems.Add(removed);
             _suppressSelection = false;
+            UpdateSelectionMarks();
             return;
         }
-        if (Selected is { } item) ShowDetails(item.Entry);
+        ShowSelection();
+    }
+
+    /// <summary>One entry: its card; several: what can be done with all of them; none: the overview.</summary>
+    private void ShowSelection()
+    {
+        var items = SelectedItems();
+        if (items.Count > 1) ShowBulk(items);
+        else if (items.Count == 1) ShowDetails(items[0].Entry);
         else ShowEmptyDetails();
+    }
+
+    /// <summary>
+    /// Several selected entries turn the avatars into round checks (a click on one adds or removes that entry) and
+    /// the box in the list header shows whether all of the list is selected.
+    /// </summary>
+    private void UpdateSelectionMarks()
+    {
+        var count = EntryList.SelectedItems.Count;
+        var total = EntryList.Items.Count;
+        EntryList.Tag = count > 1 ? "multi" : null;
+        SelectAllBox.Visibility = total > 1 ? Visibility.Visible : Visibility.Collapsed;
+        _syncingSelectAll = true;
+        SelectAllBox.IsChecked = count > 1 && count == total ? true : count > 1 ? null : false;
+        _syncingSelectAll = false;
+    }
+
+    private bool _syncingSelectAll;
+
+    /// <summary>A click (or a screen reader's toggle) on the box: the whole list is selected, or cleared when it already was.</summary>
+    private void SelectAll_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_syncingSelectAll) return;
+        if (EntryList.Items.Count > 1 && EntryList.SelectedItems.Count == EntryList.Items.Count) ClearSelection();
+        else SelectAllEntries();
+    }
+
+    private void SelectAllEntries()
+    {
+        EntryList.SelectAll();
+        UpdateSelectionMarks();
+    }
+
+    private void ClearSelection()
+    {
+        EntryList.UnselectAll();
+        UpdateSelectionMarks();
+    }
+
+    private void SelectMark_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not EntryItem item) return;
+        if (EntryList.SelectedItems.Contains(item)) EntryList.SelectedItems.Remove(item);
+        else EntryList.SelectedItems.Add(item);
+        e.Handled = true;
+    }
+
+    private void ShowBulk(List<EntryItem> items)
+    {
+        var view = new BulkActionsView(items.Select(i => i.Entry).ToList(), EntryList.Items.Count, _currentNav?.Kind == NavKind.Trash);
+        view.FavoriteRequested += favorite => SetFavoriteSelected(favorite);
+        view.DeleteRequested += DeleteSelected;
+        view.RestoreRequested += RestoreSelected;
+        view.SelectAllRequested += SelectAllEntries;
+        view.ClearRequested += ClearSelection;
+        DetailHost.Content = view;
+    }
+
+    private void SetFavoriteSelected(bool favorite)
+    {
+        var n = Vault.SetFavorite(SelectedItems().Select(i => i.Id), favorite);
+        App.Instance.Main.ShowToast(Loc.F(favorite ? "Bulk.Favorited" : "Bulk.Unfavorited", Loc.Plural(n, "Plural.Entries")));
+    }
+
+    private void RestoreSelected()
+    {
+        var n = Vault.Restore(SelectedItems().Select(i => i.Id));
+        App.Instance.Main.ShowToast(Loc.F("Bulk.Restored", Loc.Plural(n, "Plural.Entries")));
+    }
+
+    /// <summary>Several entries go to the trash (or out of it for good) only after a confirmation.</summary>
+    private async void DeleteSelected()
+    {
+        var items = SelectedItems();
+        if (items.Count == 0) return;
+        if (items.Count == 1)
+        {
+            DeleteEntry(items[0].Entry);
+            return;
+        }
+        var ids = items.Select(i => i.Id).ToList();
+        var what = Loc.Plural(ids.Count, "Plural.Entries");
+        if (items.All(i => i.Entry.IsDeleted))
+        {
+            if (!await ConfirmDialog.AskAsync(Loc.T("Bulk.DeleteForeverTitle"), Loc.F("Bulk.DeleteForeverText", what), Loc.T("Vault.DeleteForever"), danger: true))
+                return;
+            var n = Vault.DeletePermanently(ids);
+            App.Instance.Main.ShowToast(Loc.F("Bulk.DeletedForever", Loc.Plural(n, "Plural.Entries")));
+        }
+        else
+        {
+            if (!await ConfirmDialog.AskAsync(Loc.T("Bulk.DeleteTitle"), Loc.F("Bulk.DeleteText", what), Loc.T("Common.Delete"), danger: true))
+                return;
+            var n = Vault.MoveToTrash(ids);
+            App.Instance.Main.ShowToast(Loc.F("Bulk.MovedToTrash", Loc.Plural(n, "Plural.Entries")));
+        }
+        ShowEmptyDetails();
     }
 
     private void ShowDetails(VaultEntry entry)
@@ -284,6 +405,13 @@ public partial class VaultView : UserControl
         var editor = new EntryEditorView(entry, isNew, Vault.Folders());
         editor.Saved += async saved =>
         {
+            if (isNew && await UseSameAccountAsync(saved) is { } same)
+            {
+                RefreshList(same.Id);
+                ShowDetails(same);
+                if (fillAfterSave != null && editor.FillAfterSave) await fillAfterSave(same);
+                return;
+            }
             Vault.Upsert(saved);
             if (_currentNav?.Kind == NavKind.Trash || (_currentNav?.Kind == NavKind.Folder && !InFolder(saved, _currentNav.Folder)) ||
                 (_currentNav?.Kind == NavKind.Favorites && !saved.Favorite) ||
@@ -378,6 +506,52 @@ public partial class VaultView : UserControl
         var editor = OpenEditor(entry, isNew: true, fill);
         editor.ApplyClient(window);
         editor.ShowDetection(window, form);
+    }
+
+    /// <summary>
+    /// A new site entry with the login and password of an entry that already exists (a domain account of a VPN, for
+    /// example): that entry can be used for the site instead of keeping the account twice. Returns it when chosen.
+    /// </summary>
+    private async Task<VaultEntry?> UseSameAccountAsync(VaultEntry saved)
+    {
+        if (saved.EffectiveCategory != EntryCategory.Web || DomainUtil.GetHost(saved.Url) is not { } host) return null;
+        if (Vault.ActiveEntries.FirstOrDefault(e => e.Id != saved.Id && EntryMatcher.SameAccount(e, saved)) is not { } same) return null;
+        var dialog = new ConfirmDialog(Loc.T("Vault.SameAccountTitle"), Loc.F("Vault.SameAccountText", same.Title, host),
+            Loc.F("Vault.SameAccountUse", same.Title), cancelText: Loc.T("Vault.SameAccountNew"));
+        if (await App.Instance.Main.ShowDialogAsync(dialog) is not true) return null;
+        var copy = same.Clone();
+        if (!copy.AllUrls().Any(u => DomainUtil.GetHost(u) == host))
+        {
+            if (copy.Url.Length == 0 && copy.EffectiveCategory != EntryCategory.Remote) copy.Url = saved.Url;
+            else copy.ExtraUrls.Add(saved.Url);
+        }
+        if (!copy.AutoFillHosts.Contains(host, StringComparer.OrdinalIgnoreCase)) copy.AutoFillHosts.Add(host);
+        Vault.Upsert(copy);
+        App.Instance.Main.ShowToast(Loc.F("Vault.SameAccountDone", copy.Title, host));
+        return Vault.Find(copy.Id);
+    }
+
+    /// <summary>A sign-in done by hand on a site without an entry, to be saved: the user types the login and password.</summary>
+    public async void StartEntryToSave(string host, string address)
+    {
+        if (!await ConfirmLeaveEditorAsync()) return;
+        _suppressSelection = true;
+        EntryList.SelectedItem = null;
+        _suppressSelection = false;
+        var editor = OpenEditor(new VaultEntry { Category = EntryCategory.Web, Title = host, Url = address }, isNew: true);
+        editor.ForExistingAccount();
+    }
+
+    /// <summary>A new entry for a site that has none (from its sign-in page); the page's form is filled once it is saved.</summary>
+    public async void StartEntryForSite(string host, string address, SignInForm form, bool twoSteps, Func<VaultEntry, Task> fill)
+    {
+        if (!await ConfirmLeaveEditorAsync()) return;
+        _suppressSelection = true;
+        EntryList.SelectedItem = null;
+        _suppressSelection = false;
+        var entry = new VaultEntry { Category = EntryCategory.Web, Title = host, Url = address };
+        var editor = OpenEditor(entry, isNew: true, fill);
+        editor.ShowSiteForm(host, form, twoSteps);
     }
 
     private async void FindClients_Click(object sender, RoutedEventArgs e)
@@ -497,6 +671,21 @@ public partial class VaultView : UserControl
             Search.Clear();
             e.Handled = true;
         }
+        else if (ctrl && e.Key == Key.A && !InTextInput() && !DetailHost.IsKeyboardFocusWithin && EntryList.Items.Count > 0)
+        {
+            SelectAllEntries();
+            e.Handled = true;
+        }
+        else if (IsMultiple && e.Key == Key.Delete && !InTextInput())
+        {
+            DeleteSelected();
+            e.Handled = true;
+        }
+        else if (IsMultiple && e.Key == Key.Escape && !InTextInput())
+        {
+            ClearSelection();
+            e.Handled = true;
+        }
         else if (e.Key == Key.Down && Search.IsKeyboardFocused && EntryList.Items.Count > 0)
         {
             EntryList.SelectedIndex = Math.Max(0, EntryList.SelectedIndex);
@@ -505,9 +694,11 @@ public partial class VaultView : UserControl
         }
     }
 
+    private static bool InTextInput() => Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase or PasswordBox;
+
     private void EntryList_KeyDown(object sender, KeyEventArgs e)
     {
-        if (Selected is not { } item) return;
+        if (IsMultiple || Selected is not { } item) return;
         var ctrl = Keyboard.Modifiers == ModifierKeys.Control;
         if (ctrl && e.Key == Key.C) App.Instance.CopySecret(item.Entry.Password, Loc.T("Toast.PasswordCopied"), item.Entry.Id);
         else if (ctrl && e.Key == Key.B) App.Instance.CopyPlain(Login(item.Entry), Loc.T("Toast.LoginCopied"));
@@ -521,7 +712,7 @@ public partial class VaultView : UserControl
 
     private void EntryList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
-        if (Selected is { } item && !item.Entry.IsDeleted && item.Entry.Password.Length > 0)
+        if (!IsMultiple && Selected is { } item && !item.Entry.IsDeleted && item.Entry.Password.Length > 0)
             App.Instance.CopySecret(item.Entry.Password, Loc.T("Toast.PasswordCopied"), item.Entry.Id);
     }
 
@@ -532,6 +723,22 @@ public partial class VaultView : UserControl
             EntryMenu.IsOpen = false;
             return;
         }
+        MenuSelectAll.Visibility = MenuSelectAllSeparator.Visibility =
+            EntryList.SelectedItems.Count < EntryList.Items.Count ? Visibility.Visible : Visibility.Collapsed;
+        if (IsMultiple)
+        {
+            // Only what applies to all the selected entries at once.
+            var items = SelectedItems();
+            var trash = items.All(i => i.Entry.IsDeleted);
+            foreach (var single in new FrameworkElement[] { MenuCopyUser, MenuCopyPassword, MenuOpenUrl, MenuSeparator, MenuEdit, MenuDuplicate, MenuUseForClient })
+                single.Visibility = Visibility.Collapsed;
+            MenuFavorite.Visibility = trash ? Visibility.Collapsed : Visibility.Visible;
+            MenuFavorite.Header = Loc.T(items.Any(i => !i.Favorite) ? "Vault.Favorite" : "Vault.Unfavorite");
+            MenuRestore.Visibility = trash ? Visibility.Visible : Visibility.Collapsed;
+            MenuDelete.Header = Loc.F(trash ? "Bulk.DeleteForeverN" : "Bulk.DeleteN", items.Count);
+            return;
+        }
+        MenuCopyUser.Visibility = MenuCopyPassword.Visibility = MenuOpenUrl.Visibility = MenuSeparator.Visibility = Visibility.Visible;
         var deleted = item.Entry.IsDeleted;
         MenuCopyUser.IsEnabled = Login(item.Entry).Length > 0;
         MenuCopyPassword.IsEnabled = item.Entry.Password.Length > 0;
@@ -559,7 +766,8 @@ public partial class VaultView : UserControl
 
     private void MenuFavorite_Click(object sender, RoutedEventArgs e)
     {
-        if (Selected is { } item) Vault.ToggleFavorite(item.Id);
+        if (IsMultiple) SetFavoriteSelected(SelectedItems().Any(i => !i.Favorite));
+        else if (Selected is { } item) Vault.ToggleFavorite(item.Id);
     }
 
     private void MenuEdit_Click(object sender, RoutedEventArgs e)
@@ -579,6 +787,11 @@ public partial class VaultView : UserControl
 
     private void MenuRestore_Click(object sender, RoutedEventArgs e)
     {
+        if (IsMultiple)
+        {
+            RestoreSelected();
+            return;
+        }
         if (Selected is not { } item) return;
         Vault.Restore(item.Id);
         App.Instance.Main.ShowToast(Loc.T("Vault.Restored"));
@@ -586,8 +799,11 @@ public partial class VaultView : UserControl
 
     private void MenuDelete_Click(object sender, RoutedEventArgs e)
     {
-        if (Selected is { } item) DeleteEntry(item.Entry);
+        if (IsMultiple) DeleteSelected();
+        else if (Selected is { } item) DeleteEntry(item.Entry);
     }
+
+    private void MenuSelectAll_Click(object sender, RoutedEventArgs e) => SelectAllEntries();
 
     // ------------------------------------------------------------------ sidebar buttons
 
@@ -646,15 +862,31 @@ public partial class VaultView : UserControl
         ListColumn.MaxWidth = Math.Max(ListColumn.MinWidth, Math.Min(ListMax, room - sidebar));
     }
 
-    /// <summary>A narrow list puts the sorting under its title instead of squeezing the title away.</summary>
-    private void ListHeader_SizeChanged(object sender, SizeChangedEventArgs e)
+    private void ListHeader_SizeChanged(object sender, SizeChangedEventArgs e) => ArrangeListHeader();
+
+    /// <summary>
+    /// The sorting (or "empty trash") goes under the title when the title, its count and the sorting do not fit in
+    /// one line, instead of squeezing the title away; a title too long even for a line of its own is shortened.
+    /// </summary>
+    private void ArrangeListHeader()
     {
-        var narrow = ListHeader.ActualWidth < 300;
+        if (ListHeader.ActualWidth <= 0) return;
+        var title = new System.Windows.Media.FormattedText(ListTitle.Text, System.Globalization.CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
+            new System.Windows.Media.Typeface(ListTitle.FontFamily, ListTitle.FontStyle, ListTitle.FontWeight, ListTitle.FontStretch), ListTitle.FontSize,
+            System.Windows.Media.Brushes.Black, System.Windows.Media.VisualTreeHelper.GetDpi(ListTitle).PixelsPerDip).WidthIncludingTrailingWhitespace;
+        var side = SortBox.Visibility == Visibility.Visible ? SortBox.Width
+            : EmptyTrashButton.Visibility == Visibility.Visible ? Math.Max(EmptyTrashButton.ActualWidth, 110) : 0;
+        // The "select all" box and the count badge with their margins (as measured; before the first layout, close to it).
+        var box = SelectAllBox.Visibility != Visibility.Visible ? 0 : SelectAllBox.DesiredSize.Width > 0 ? SelectAllBox.DesiredSize.Width : 49;
+        var badge = ((FrameworkElement)ListCount.Parent).DesiredSize.Width;
+        var count = (badge > 0 ? badge : 30) + 10;
+        var narrow = side > 0 && ListHeader.ActualWidth < box + title + count + side;
         foreach (var element in new FrameworkElement[] { SortBox, EmptyTrashButton })
         {
+            // Under the title, not under the "select all" box.
             Grid.SetRow(element, narrow ? 1 : 0);
-            Grid.SetColumn(element, narrow ? 0 : 2);
-            Grid.SetColumnSpan(element, narrow ? 3 : 1);
+            Grid.SetColumn(element, narrow ? 1 : 2);
+            Grid.SetColumnSpan(element, narrow ? 2 : 1);
             element.HorizontalAlignment = narrow ? HorizontalAlignment.Left : HorizontalAlignment.Stretch;
             element.Margin = new Thickness(0, narrow ? 8 : 0, 0, 0);
         }

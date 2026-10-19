@@ -59,9 +59,13 @@ public sealed class EntryDetailsView : UserControl
         if (entry.Password.Length > 0) fields.Children.Add(SecretRow(Loc.T("Field.Password"), entry.Password, "\uE8D7"));
         if (entry.StoredPin().Length > 0) fields.Children.Add(SecretRow(Loc.T("Editor.Pin"), entry.StoredPin(), "\uE928"));
         var urlLabel = Loc.T(entry.EffectiveCategory == EntryCategory.Remote ? "Editor.Server" : "Field.Website");
-        foreach (var url in entry.AllUrls()) fields.Children.Add(Row(urlLabel, url, "\uE774", isLink: true));
+        if (!string.IsNullOrWhiteSpace(entry.Url)) fields.Children.Add(Row(urlLabel, entry.Url, "\uE774", isLink: true));
+        foreach (var url in entry.ExtraUrls.Where(u => !string.IsNullOrWhiteSpace(u)))
+            fields.Children.Add(Row(Loc.T("Field.Website"), url, "\uE774", isLink: true));
         if (entry.AutoFillHosts.Count > 0)
             fields.Children.Add(Row(Loc.T("Details.ChosenFor"), string.Join("\n", entry.AutoFillHosts), "\uE73E", copy: false));
+        if (entry.SignsInToSite)
+            fields.Children.Add(Row(Loc.T("Editor.AutoLogin"), Loc.T(App.Instance.Settings.AutoLoginWeb ? "Details.AutoLoginSiteOn" : "Details.AutoLoginSiteOff"), "\uE768", copy: false));
         if (entry.Email.Length > 0) fields.Children.Add(Row(Loc.T("Field.Email"), entry.Email, "\uE715"));
         if (entry.Phone.Length > 0) fields.Children.Add(Row(Loc.T("Field.Phone"), entry.Phone, "\uE717"));
         if (entry.SecretKey.Length > 0) fields.Children.Add(SecretRow(Loc.T("Field.Key"), entry.SecretKey, "\uE192"));
@@ -101,7 +105,7 @@ public sealed class EntryDetailsView : UserControl
             var at = new StackPanel();
             if (KnownApps.ForPatterns(entry.WindowPatterns) is { } app) at.Children.Add(Row(Loc.T("Editor.Client"), app.Name, "\uE705", copy: false));
             if (entry.WindowPatterns.Count > 0) at.Children.Add(Row(Loc.T("Field.Windows"), string.Join("\n", entry.WindowPatterns), "\uE737", copy: false));
-            if (entry.AutoLogin) at.Children.Add(Row(Loc.T("Editor.AutoLogin"), Loc.T("Details.AutoLoginOn"), "\uE768", copy: false));
+            if (entry.SignsInToProgram) at.Children.Add(Row(Loc.T("Editor.AutoLogin"), Loc.T("Details.AutoLoginOn"), "\uE768", copy: false));
             if (entry.AutoTypeSequence.Length > 0) at.Children.Add(Row(Loc.T("Field.Sequence"), entry.AutoTypeSequence, "\uE765", copy: false));
             root.Children.Add(Card(at));
         }
@@ -141,7 +145,7 @@ public sealed class EntryDetailsView : UserControl
         var sub = new WrapPanel { Margin = new Thickness(0, 5, 0, 0) };
         sub.Children.Add(Chip(VaultView.CategoryIcon(e.EffectiveCategory), VaultView.CategoryName(e.EffectiveCategory)));
         if (KnownApps.ForPatterns(e.WindowPatterns) is { } client && client.Name != e.Title) sub.Children.Add(Chip("\uE7F4", client.Name));
-        if (e.AutoLogin) sub.Children.Add(Chip("\uE768", Loc.T("Details.AutoLoginChip")));
+        if (e.SignsInToProgram || e.SignsInToSite) sub.Children.Add(Chip("\uE768", Loc.T("Details.AutoLoginChip")));
         if (e.Folder.Length > 0) sub.Children.Add(Chip("\uE8B7", e.Folder.Replace("/", " / ")));
         if (e.EffectiveCategory == EntryCategory.Web && DomainUtil.GetHost(e.Url) is { } host) sub.Children.Add(Chip("\uE774", host));
         if (e.IsDeleted) sub.Children.Add(Chip("\uE74D", Loc.T("Details.InTrash")));

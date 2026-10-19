@@ -49,6 +49,8 @@ public partial class SettingsDialog : DialogBase
         Hotkey.Text = Settings.AutoTypeHotkey;
         Suggestions.IsChecked = Settings.SmartSuggestions;
         AutoLogin.IsChecked = Settings.AutoLogin;
+        AutoLoginWeb.IsChecked = Settings.AutoLoginWeb;
+        OfferToSave.IsChecked = Settings.OfferToSave;
         AutoFillWeb.IsChecked = Settings.AutoFillWeb;
         AutoFillLogBox.IsChecked = Settings.AutoFillLog;
         Submit.IsChecked = Settings.SubmitAfterFill;
@@ -194,6 +196,8 @@ public partial class SettingsDialog : DialogBase
         Settings.LockOnWindowsLock = LockOnWindowsLock.IsChecked == true;
         Settings.SmartSuggestions = Suggestions.IsChecked == true;
         Settings.AutoLogin = AutoLogin.IsChecked == true;
+        Settings.AutoLoginWeb = AutoLoginWeb.IsChecked == true;
+        Settings.OfferToSave = OfferToSave.IsChecked == true;
         Settings.AutoFillWeb = AutoFillWeb.IsChecked == true;
         Settings.AutoFillLog = AutoFillLogBox.IsChecked == true;
         Settings.SubmitAfterFill = Submit.IsChecked == true;

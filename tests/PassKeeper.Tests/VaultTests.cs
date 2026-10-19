@@ -141,6 +141,34 @@ public class VaultTests
     }
 
     [Fact]
+    public void SelectedEntries_ChangedTogether_WithOneSave()
+    {
+        using var dir = new TempDir();
+        var vault = new VaultService(dir.Path);
+        vault.Create("user", "Correct-Horse-9");
+        var vpn = Enumerable.Range(1, 4).Select(i => new VaultEntry { Title = "VPN " + i, Category = EntryCategory.Remote, Password = "p" + i }).ToList();
+        var site = new VaultEntry { Title = "Site", Url = "https://example.org", Password = "s" };
+        vault.AddRange([.. vpn, site]);
+        var saves = 0;
+        vault.DataChanged += (_, _) => saves++;
+
+        Assert.Equal(4, vault.SetFavorite(vpn.Select(e => e.Id), true));
+        Assert.Equal(4, vault.Data.Entries.Count(e => e.Favorite));
+        Assert.Equal(4, vault.MoveToTrash(vpn.Select(e => e.Id)));
+        Assert.Equal(["Site"], vault.ActiveEntries.Select(e => e.Title));
+        Assert.Equal(2, vault.Restore(vpn.Take(2).Select(e => e.Id)));
+        Assert.Equal(2, vault.DeletePermanently(vpn.Skip(2).Select(e => e.Id)));
+        Assert.Equal(3, vault.Data.Entries.Count);
+        Assert.Equal(0, vault.MoveToTrash([Guid.NewGuid()]));
+        Assert.Equal(4, saves);
+
+        // The changes are on disk.
+        var reopened = new VaultService(dir.Path);
+        reopened.UnlockWithMaster("Correct-Horse-9");
+        Assert.Equal(["Site", "VPN 1", "VPN 2"], reopened.ActiveEntries.Select(e => e.Title).Order());
+    }
+
+    [Fact]
     public void PasswordHistory_IsKept()
     {
         var e = new VaultEntry { Password = "a" };

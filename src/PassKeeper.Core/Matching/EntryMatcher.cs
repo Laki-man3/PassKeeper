@@ -78,6 +78,22 @@ public static class EntryMatcher
     }
 
     /// <summary>
+    /// The same account in two entries: the same password and the same login, also when one of them is written with
+    /// the domain ("CORP\jdoe", "jdoe@corp.example") and the other without it.
+    /// </summary>
+    public static bool SameAccount(VaultEntry a, VaultEntry b) =>
+        a.Password.Length > 0 && a.Password == b.Password && Account(a) is { Length: > 0 } login && login == Account(b);
+
+    private static string Account(VaultEntry e)
+    {
+        var login = (e.Username.Length > 0 ? e.Username : e.Email).Trim().ToLowerInvariant();
+        var slash = login.LastIndexOf('\\');
+        if (slash >= 0) login = login[(slash + 1)..];
+        var at = login.IndexOf('@');
+        return at > 0 ? login[..at] : login;
+    }
+
+    /// <summary>
     /// The entry to fill without asking (matches as returned by <see cref="Match"/>). On a site: the only entry of the
     /// site or its domain, or the only one saved for exactly this address — other accounts of the same domain (a
     /// company's other services) do not count against it. In a program: the only entry for its windows.

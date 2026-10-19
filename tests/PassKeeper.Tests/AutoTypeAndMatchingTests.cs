@@ -13,6 +13,87 @@ public class AutoTypeAndMatchingTests
     };
 
     [Fact]
+    public void Sequence_SplitsIntoElementsAndJoinsBack()
+    {
+        var sequence = "{USERNAME}{TAB}abc {{}x{}}{DELAY 500}{PASSWORD}{ENTER}";
+        var tokens = AutoTypeSequence.Tokenize(sequence);
+        Assert.Equal(["{USERNAME}", "{TAB}", "abc {{}x{}}", "{DELAY 500}", "{PASSWORD}", "{ENTER}"], tokens);
+        Assert.Equal(sequence, string.Concat(tokens));
+        // Removing one element (the cross on it in the editor) leaves a valid sequence.
+        tokens.RemoveAt(0);
+        Assert.Null(AutoTypeSequence.Validate(string.Concat(tokens)));
+        Assert.Equal(["broken {TAB"], AutoTypeSequence.Tokenize("broken {TAB"));
+
+        // A removed field takes its separator with it; keystroke sequences lose just the element.
+        Assert.Equal("{PASSWORD}{ENTER}", AutoTypeSequence.Remove("{USERNAME}{TAB}{PASSWORD}{ENTER}", 0));
+        Assert.Equal("{USERNAME}{ENTER}", AutoTypeSequence.Remove("{USERNAME}{TAB}{PASSWORD}{ENTER}", 2));
+        Assert.Equal("{USERNAME}{TAB}{PASSWORD}", AutoTypeSequence.Remove("{USERNAME}{TAB}{PASSWORD}{ENTER}", 3));
+        Assert.Equal("{PASSWORD}{ENTER}", AutoTypeSequence.Remove("{USERNAME}{ENTER}{PASSWORD}{ENTER}", 0));
+        Assert.Equal("{USERNAME}{ENTER}{DELAY 800}{ENTER}", AutoTypeSequence.Remove("{USERNAME}{ENTER}{DELAY 800}{PASSWORD}{ENTER}", 3));
+    }
+
+    [Fact]
+    public void Sequence_MadeFromTheFormFields()
+    {
+        Assert.Equal("{USERNAME}{TAB}{PASSWORD}{ENTER}", AutoTypeSequence.ForForm(login: true, password: true, submit: true));
+        Assert.Equal("{USERNAME}{TAB}{PASSWORD}", AutoTypeSequence.ForForm(login: true, password: true));
+        // Login first, password on the next page: Enter after each page with automatic sign-in only.
+        Assert.Equal("{USERNAME}{ENTER}{PASSWORD}{ENTER}", AutoTypeSequence.ForForm(login: true, password: true, twoSteps: true, submit: true));
+        Assert.Equal("{USERNAME}{TAB}{PASSWORD}", AutoTypeSequence.ForForm(login: true, password: true, twoSteps: true));
+        Assert.Equal("{USERNAME}{TAB}{PASSWORD}{TAB}{PIN}{ENTER}", AutoTypeSequence.ForForm(login: true, password: true, pin: true, submit: true));
+        Assert.Equal("{PIN}{ENTER}", AutoTypeSequence.ForForm(login: false, password: false, pin: true, submit: true));
+        Assert.Equal("", AutoTypeSequence.ForForm(login: false, password: false));
+        Assert.Equal("{USERNAME}{TAB}{PASSWORD}", AutoTypeSequence.WithoutEnter("{USERNAME}{ENTER}{PASSWORD}{ENTER}"));
+
+        var entry = new VaultEntry { FormSequence = "{USERNAME}{ENTER}{PASSWORD}{ENTER}", AutoLogin = true };
+        Assert.Equal("{USERNAME}{ENTER}{PASSWORD}{ENTER}", AutoTypeSequence.Generated(entry));
+        entry.AutoLogin = false;
+        Assert.Equal("{USERNAME}{TAB}{PASSWORD}", AutoTypeSequence.Generated(entry));
+        // A second account of the same site has the same form.
+        Assert.Equal(entry.FormSequence, entry.CreateDuplicate("copy").FormSequence);
+    }
+
+    [Fact]
+    public void SameAccount_LoginWithOrWithoutTheDomain()
+    {
+        var vpn = new VaultEntry { Title = "VPN", Username = @"CORP\jdoe", Password = "S3cret!" };
+        Assert.True(EntryMatcher.SameAccount(vpn, new VaultEntry { Username = "jdoe", Password = "S3cret!" }));
+        Assert.True(EntryMatcher.SameAccount(vpn, new VaultEntry { Email = "JDoe@corp.example", Password = "S3cret!" }));
+        Assert.False(EntryMatcher.SameAccount(vpn, new VaultEntry { Username = "jdoe", Password = "other" }));
+        Assert.False(EntryMatcher.SameAccount(vpn, new VaultEntry { Username = "asmith", Password = "S3cret!" }));
+        Assert.False(EntryMatcher.SameAccount(new VaultEntry { Username = "a" }, new VaultEntry { Username = "a" }));
+    }
+
+    [Fact]
+    public void FieldPlan_OnlyForSequencesOfFields()
+    {
+        var plan = FieldPlan.Parse("{USERNAME}{ENTER}{PASSWORD}{ENTER}")!;
+        Assert.True(plan.Includes(FieldKind.Login));
+        Assert.True(plan.Includes(FieldKind.Email)); // the login field, whatever it asks for
+        Assert.True(plan.EnterAfter(FieldKind.Login));
+        Assert.True(plan.EnterAfter(FieldKind.Password));
+        Assert.False(plan.Includes(FieldKind.Pin));
+
+        // The user removed the login: only the password is filled, and Enter after it.
+        var passwordOnly = FieldPlan.Parse("{PASSWORD}{ENTER}")!;
+        Assert.False(passwordOnly.Includes(FieldKind.Login));
+        Assert.True(passwordOnly.EnterAfter(FieldKind.Password));
+        Assert.False(FieldPlan.Parse("{USERNAME}{TAB}{PASSWORD}")!.HasEnter);
+
+        // Keystrokes, delays and text are typed as they are, not filled by fields.
+        Assert.Null(FieldPlan.Parse("{USERNAME}{ENTER}{DELAY 800}{PASSWORD}{ENTER}"));
+        Assert.Null(FieldPlan.Parse("{PASSWORD}x"));
+        Assert.Null(FieldPlan.Parse("{ENTER}{PASSWORD}"));
+        Assert.Null(FieldPlan.Parse(""));
+
+        var entry = new VaultEntry { FormSequence = "{USERNAME}{TAB}{PASSWORD}{ENTER}", AutoLogin = true };
+        Assert.True(FieldPlan.For(entry)!.Generated);
+        entry.AutoTypeSequence = "{PASSWORD}";
+        Assert.False(FieldPlan.For(entry)!.Generated);
+        Assert.False(FieldPlan.For(entry)!.Includes(FieldKind.Login));
+    }
+
+    [Fact]
     public void Obvious_SignInPageOfACompanyDomain()
     {
         // The single sign-on page has its own entry; the company's other services share the domain.
@@ -44,6 +125,38 @@ public class AutoTypeAndMatchingTests
         Assert.Equal(second, EntryMatcher.Obvious(matches, site: true));
         // Without a choice the user is asked.
         Assert.Null(EntryMatcher.Obvious(EntryMatcher.Match([first, new VaultEntry { Url = "https://sso.corp.local" }], page), site: true));
+    }
+
+    [Fact]
+    public void ChosenAccount_NotCopiedByDuplicate_AndDroppedWithItsAddress()
+    {
+        var entry = new VaultEntry { Title = "A", Url = "https://sso.corp.local/auth", ExtraUrls = ["https://mail.corp.local"], AutoFillHosts = ["sso.corp.local", "mail.corp.local"] };
+        // A duplicate is a second account: it must not claim the sites of the original.
+        var copy = entry.CreateDuplicate("A (copy)");
+        Assert.Empty(copy.AutoFillHosts);
+        Assert.Equal(2, entry.AutoFillHosts.Count);
+        // The user removed one address in the editor: its choice goes with it.
+        var before = entry.AllUrls().ToList();
+        entry.ExtraUrls.Clear();
+        entry.ForgetChoicesOfRemovedAddresses(before);
+        Assert.Equal(["sso.corp.local"], entry.AutoFillHosts);
+        // A choice whose address an earlier version dropped (a VPN entry chosen on a site, then edited) stays.
+        var vpn = new VaultEntry { Title = "VPN", Category = EntryCategory.Remote, Url = "vpn.corp.local", AutoFillHosts = ["sso.corp.local"] };
+        vpn.ForgetChoicesOfRemovedAddresses(vpn.AllUrls().ToList());
+        Assert.Equal(["sso.corp.local"], vpn.AutoFillHosts);
+    }
+
+    [Fact]
+    public void AutoLogin_SiteAndProgramAreSeparate()
+    {
+        var site = new VaultEntry { Title = "Portal", Url = "https://portal.example.org", AutoLogin = true };
+        Assert.True(site.SignsInToSite);
+        Assert.False(site.SignsInToProgram);
+        // A VPN entry used on the company portal: its switch is about the client, the portal is only filled in.
+        var vpn = new VaultEntry { Title = "VPN", Category = EntryCategory.Remote, WindowPatterns = ["vpnui.exe"], ExtraUrls = ["https://portal.example.org"], AutoLogin = true };
+        Assert.True(vpn.SignsInToProgram);
+        Assert.False(vpn.SignsInToSite);
+        Assert.False(new VaultEntry { Url = "https://portal.example.org" }.SignsInToSite);
     }
 
     [Fact]

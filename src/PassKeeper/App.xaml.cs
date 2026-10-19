@@ -22,7 +22,10 @@ public partial class App : Application
     private AutoLoginService? _autoLogin;
     private ForegroundWatcher? _foreground;
     private BrowserPageWatcher? _pages;
-    private readonly Dictionary<string, DateTime> _pageScans = [];
+    private static readonly int[] PageScanPauses = [0, 250, 400, 600, 800, 1000];
+
+    /// <summary>Sign-in pages looked at a moment ago; Done: the look was finished, not cut short by a focus change.</summary>
+    private readonly Dictionary<string, (DateTime At, bool Done)> _pageScans = [];
     private SuggestionPopup? _popup;
 
     public App(StartupOptions options, SingleInstance? instance)
@@ -436,8 +439,12 @@ public partial class App : Application
                 _popup.ShowEntries(field, target, matches);
                 return;
             }
-            if (all.Count == 0 && target.IsBrowser && field.IsPassword)
+            // A site without entries: create one for it (the form's fields are known) or use another entry. Only on a
+            // sign-in form: an e-mail box for a newsletter is not one.
+            if (all.Count == 0 && target.IsBrowser && field.Kind is FieldKind.Password or FieldKind.Login or FieldKind.Email or FieldKind.Phone &&
+                await Task.Run(() => IsSignInForm(field, target)))
             {
+                if (field.IsPassword) RememberSignInWithoutEntry(field.Window, target);
                 _popup.ShowChoose(field, target);
                 return;
             }
@@ -462,7 +469,7 @@ public partial class App : Application
     /// </summary>
     private void OnPageShown(BrowserPage page)
     {
-        if (!Settings.SmartSuggestions || !Settings.AutoFillWeb || IsExiting) return;
+        if (!Settings.SmartSuggestions || IsExiting) return;
         var target = TargetDetector.Capture(page.Window, detectUrl: true, focused: page.Document);
         if (DomainUtil.GetHost(target.Url) == null)
         {
@@ -472,29 +479,40 @@ public partial class App : Application
         Dispatcher.BeginInvoke(async () =>
         {
             if (!HasProfile || !Vault.IsUnlocked || IsExiting || AutoType.IsBusy) return;
+            await OfferToSaveAsync(page, target);
+            if (!Settings.AutoFillWeb) return;
             var matches = EntryMatcher.Match(Vault.ActiveEntries, target.ToContext())
                 .Where(m => AutoTypeService.CanFill(m.Entry, FieldKind.Login))
                 .ToList();
             AutoFillLog.Write($"page {AutoFillLog.Describe(target)} (cursor not in a field): {AutoFillLog.Describe(matches)}");
             if (matches.Count == 0) return;
-            // A page already examined a moment ago (its title changes, the user comes back to it) is left as it is.
+            // A page already examined a moment ago (its title changes, the user comes back to it) is left as it is. A
+            // look cut short because the page got the focus again (the browser window activated once more) is taken
+            // over by this one: otherwise neither of them would fill the form.
             var key = page.Window + "|" + target.Url;
-            foreach (var old in _pageScans.Where(p => DateTime.UtcNow - p.Value > TimeSpan.FromSeconds(15)).Select(p => p.Key).ToList()) _pageScans.Remove(old);
-            if (!_pageScans.TryAdd(key, DateTime.UtcNow)) return;
+            foreach (var old in _pageScans.Where(p => DateTime.UtcNow - p.Value.At > TimeSpan.FromSeconds(15)).Select(p => p.Key).ToList()) _pageScans.Remove(old);
+            if (_pageScans.TryGetValue(key, out var scan) && scan.Done) return;
+            _pageScans[key] = (DateTime.UtcNow, false);
             LoginField? field = null;
-            // The form may still be appearing: a few looks over two seconds.
-            for (var attempt = 0; attempt < 3 && field == null; attempt++)
+            var started = Environment.TickCount64;
+            // The form may still be appearing (a page that draws it with a script): looks for three seconds, often at
+            // first. One look reads the page's fields in a single pass.
+            foreach (var pause in PageScanPauses)
             {
-                if (attempt > 0) await Task.Delay(700);
+                if (field != null) break;
+                if (pause > 0) await Task.Delay(pause);
                 if (_watcher?.IsCurrent(page.Sequence) != true) return;
                 field = await Task.Run(() => FieldFinder.FindSignInField(page.Document, page.Window));
             }
             if (field == null)
             {
+                _pageScans[key] = (DateTime.UtcNow, true);
                 AutoFillLog.Write("  no sign-in form found on the page");
                 return;
             }
             if (_watcher?.IsCurrent(page.Sequence) != true) return;
+            _pageScans[key] = (DateTime.UtcNow, true);
+            AutoFillLog.Write($"  sign-in form found ({field.Kind}, {Environment.TickCount64 - started} ms)");
             _popup ??= CreatePopup();
             if (EntryMatcher.Obvious(matches, site: true) is { } entry &&
                 await AutoType.TryAutoFillAsync(entry, field, target, putCursor: true))
@@ -506,6 +524,57 @@ public partial class App : Application
             AutoFillLog.Write("  list of entries shown at the login field");
             _popup.ShowEntries(field, target, matches);
         });
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex SignInAddress = new(
+        @"(log-?in|sign-?in|sign_in|auth|logon|account|sso|вход|авториз)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+    /// <summary>A password field, a login field with a password field after it, or a field on a sign-in address.</summary>
+    private static bool IsSignInForm(LoginField field, TargetWindow target) =>
+        field.IsPassword || FieldFinder.FindPasswordAfter(field.Element, FieldFinder.FormOf(field)) != null ||
+        Uri.TryCreate(target.Url, UriKind.Absolute, out var uri) && SignInAddress.IsMatch(uri.AbsolutePath + uri.Query);
+
+    // ------------------------------------------------------------------ offer to save a sign-in done by hand
+
+    private (IntPtr Window, string Host, string Address, DateTime At)? _signInWithoutEntry;
+
+    /// <summary>
+    /// The user is signing in by hand on a site PassKeeper has no entry for (the cursor went into its password field).
+    /// Nothing is read from the form: when the browser then shows another page of the site, PassKeeper offers to save
+    /// an entry for it, which the user fills in.
+    /// </summary>
+    private void RememberSignInWithoutEntry(IntPtr window, TargetWindow target)
+    {
+        if (!Settings.OfferToSave || DomainUtil.GetHost(target.Url) is not { } host || Settings.NeverSaveSites.Contains(host)) return;
+        var address = Uri.TryCreate(target.Url, UriKind.Absolute, out var uri) ? uri.GetLeftPart(UriPartial.Authority) : "https://" + host;
+        _signInWithoutEntry = (window, host, address, DateTime.UtcNow);
+    }
+
+    /// <summary>PassKeeper filled the form or the user chose what to do in the card: there is nothing to offer.</summary>
+    private void ForgetSignInWithoutEntry() => _signInWithoutEntry = null;
+
+    /// <summary>
+    /// A page was shown after the user signed in by hand: a page of the same site in the same window within two
+    /// minutes, without a password field on it (a page with the form again means the sign-in failed).
+    /// </summary>
+    private async Task OfferToSaveAsync(BrowserPage page, TargetWindow target)
+    {
+        if (_signInWithoutEntry is not { } pending || pending.Window != page.Window) return;
+        if (DateTime.UtcNow - pending.At > TimeSpan.FromMinutes(2))
+        {
+            ForgetSignInWithoutEntry();
+            return;
+        }
+        // The answer to the form often comes at the same address: the page counts, not its address.
+        if (DomainUtil.GetHost(target.Url) is not { } host) return;
+        var sameSite = DomainUtil.CompareHosts(host, pending.Host) > 0;
+        if (!sameSite) return;
+        if (await Task.Run(() => FieldFinder.FindSignInField(page.Document, page.Window)) is { IsPassword: true }) return;
+        if (Vault.ActiveEntries.Any(e => e.AllUrls().Any(u => DomainUtil.GetHost(u) == pending.Host))) return;
+        ForgetSignInWithoutEntry();
+        AutoFillLog.Write($"signed in by hand on {pending.Host}: offering to save it");
+        _popup ??= CreatePopup();
+        _popup.ShowSaveOffer(page.Window, pending.Host, pending.Address);
     }
 
     private SuggestionPopup CreatePopup()
@@ -527,8 +596,9 @@ public partial class App : Application
                 entry = AutoType.RememberChoice(entry, target);
                 AutoFillLog.Write($"chosen in the list: \"{entry.Title}\", filled in by itself on {AutoFillLog.Describe(target)} from now on");
             }
+            ForgetSignInWithoutEntry();
             AutoType.MarkFilled(field.Window, target);
-            await AutoType.FillFieldAsync(entry, field);
+            await AutoType.FillAndSignInAsync(entry, field, target);
         };
         popup.UnlockRequested += async field =>
         {
@@ -536,13 +606,25 @@ public partial class App : Application
         };
         popup.ChooseRequested += async (field, target) =>
         {
+            ForgetSignInWithoutEntry();
             var (entry, remember) = await AutoTypePickerWindow.PickAsync(target, [], Vault.ActiveEntries);
             Native.ForceForeground(field.Window);
             if (entry == null) return;
             if (remember) entry = AutoType.RememberChoice(entry, target);
             await Task.Delay(150);
             AutoType.MarkFilled(field.Window, target);
-            await AutoType.FillFieldAsync(entry, field);
+            await AutoType.FillAndSignInAsync(entry, field, target);
+        };
+        popup.CreateSiteRequested += (field, target) =>
+        {
+            ForgetSignInWithoutEntry();
+            CreateEntryForSite(field, target);
+        };
+        popup.SaveRequested += (host, address) => SaveSignIn(host, address);
+        popup.NeverSaveRequested += host =>
+        {
+            if (!Settings.NeverSaveSites.Contains(host)) Settings.NeverSaveSites.Add(host);
+            Settings.Save();
         };
         popup.CreateRequested += async field =>
         {
@@ -568,6 +650,46 @@ public partial class App : Application
             Main.WindowState = WindowState.Minimized;
             if (!await AutoType.FillWindowAsync(saved, hwnd, submit: true))
                 Tray?.ShowBalloon("PassKeeper", Loc.T("AutoType.WindowGone"));
+        });
+    }
+
+    /// <summary>The user agreed to save a sign-in done by hand: a new entry for the site, filled in by the user.</summary>
+    private void SaveSignIn(string host, string address)
+    {
+        ShowMainWindow();
+        Main.CloseAllDialogs();
+        ShowStartPage();
+        if (Main.CurrentPage is VaultView view) view.StartEntryToSave(host, address);
+    }
+
+    /// <summary>
+    /// Opens a new entry for a site that has none, from its sign-in page: address, form fields and the sequence made
+    /// from them are filled in; once it is saved, PassKeeper goes back to the page and fills the form.
+    /// </summary>
+    public async void CreateEntryForSite(LoginField field, TargetWindow target)
+    {
+        var host = DomainUtil.GetHost(target.Url);
+        if (host == null) return;
+        var (form, twoSteps) = await Task.Run(() => FieldFinder.DescribeForm(field));
+        ShowMainWindow();
+        Main.CloseAllDialogs();
+        ShowStartPage();
+        if (Main.CurrentPage is not VaultView view) return;
+        var origin = Uri.TryCreate(target.Url, UriKind.Absolute, out var uri) ? uri.GetLeftPart(UriPartial.Authority) : "https://" + host;
+        view.StartEntryForSite(host, origin, form, twoSteps, async saved =>
+        {
+            Main.WindowState = WindowState.Minimized;
+            Native.ForceForeground(field.Window);
+            await Task.Delay(250);
+            // The page may have been left meanwhile: the form is looked for again in the window.
+            var start = await Task.Run(() => AutoTypeService.PutCursorInto(field) ? field : FieldFinder.FindSignInField(field.Window) is { } found && AutoTypeService.PutCursorInto(found) ? found : null);
+            if (start == null)
+            {
+                Tray?.ShowBalloon("PassKeeper", Loc.T("AutoType.WindowGone"));
+                return;
+            }
+            AutoType.MarkFilled(field.Window, target);
+            await AutoType.FillAndSignInAsync(saved, start, target);
         });
     }
 

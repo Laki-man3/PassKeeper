@@ -27,11 +27,20 @@ public sealed class VaultEntry
     public bool Favorite { get; set; }
     /// <summary>Custom auto-type sequence; empty means the default one.</summary>
     public string AutoTypeSequence { get; set; } = "";
+    /// <summary>
+    /// The fields of the sign-in form the entry was created for, as a sequence for automatic sign-in
+    /// ("{USERNAME}{TAB}{PASSWORD}{ENTER}"); the sequence shown and used when <see cref="AutoTypeSequence"/> is empty
+    /// is made from it (see <c>AutoType.AutoTypeSequence.Generated</c>). Empty when the form was never seen.
+    /// </summary>
+    public string FormSequence { get; set; } = "";
     /// <summary>Window title / process name wildcard patterns for desktop applications.</summary>
     public List<string> WindowPatterns { get; set; } = [];
     /// <summary>Section chosen by the user; null means it is derived from the entry (see <see cref="EntryCategories.Detect"/>).</summary>
     public EntryCategory? Category { get; set; }
-    /// <summary>Sign in automatically when a matching application window shows its login form.</summary>
+    /// <summary>
+    /// Sign in automatically: a VPN client or program when its sign-in window appears, a website when PassKeeper fills
+    /// its sign-in form by itself (see <see cref="SignsInToProgram"/> and <see cref="SignsInToSite"/>).
+    /// </summary>
     public bool AutoLogin { get; set; }
     public List<CustomField> CustomFields { get; set; } = [];
     public List<PasswordHistoryItem> PasswordHistory { get; set; } = [];
@@ -45,6 +54,17 @@ public sealed class VaultEntry
 
     [System.Text.Json.Serialization.JsonIgnore]
     public EntryCategory EffectiveCategory => Category ?? EntryCategories.Detect(this);
+
+    /// <summary>Signs in to its VPN client or program by itself when the sign-in window appears.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool SignsInToProgram => AutoLogin && EffectiveCategory is EntryCategory.Remote or EntryCategory.App;
+
+    /// <summary>
+    /// Submits the sign-in form of its website after filling it in. A client entry linked to a site (its portal) does
+    /// not: its switch is about the client.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool SignsInToSite => AutoLogin && EffectiveCategory == EntryCategory.Web;
 
     private static readonly string[] PinFieldNames = ["pin", "пин", "pin-код", "пин-код", "pin code", "token pin", "pin токена"];
 
@@ -81,7 +101,10 @@ public sealed class VaultEntry
     public CustomField? FindPinField() =>
         CustomFields.FirstOrDefault(f => PinFieldNames.Contains(f.Name.Trim().Replace('\u2011', '-').Replace('\u2010', '-').ToLowerInvariant()));
 
-    /// <summary>Independent copy with a new identity, fresh dates and no password history.</summary>
+    /// <summary>
+    /// Independent copy with a new identity, fresh dates and no password history. The sites where the original is the
+    /// chosen account stay with the original: two chosen accounts for one site would leave nothing to fill in.
+    /// </summary>
     public VaultEntry CreateDuplicate(string title)
     {
         var copy = Clone();
@@ -91,8 +114,24 @@ public sealed class VaultEntry
         copy.LastUsedUtc = null;
         copy.DeletedUtc = null;
         copy.PasswordHistory.Clear();
+        copy.AutoFillHosts.Clear();
         return copy;
     }
+
+    /// <summary>
+    /// An address removed in the editor takes the choice for its site with it. Only the sites of the addresses the
+    /// entry had before the edit are dropped: a choice kept without its address by an earlier version still works.
+    /// </summary>
+    public void ForgetChoicesOfRemovedAddresses(IEnumerable<string> previousUrls)
+    {
+        var now = HostsOf(AllUrls());
+        var removed = HostsOf(previousUrls);
+        removed.ExceptWith(now);
+        AutoFillHosts.RemoveAll(removed.Contains);
+    }
+
+    private static HashSet<string> HostsOf(IEnumerable<string> urls) =>
+        urls.Select(Matching.DomainUtil.GetHost).OfType<string>().ToHashSet(StringComparer.OrdinalIgnoreCase);
 
     public IEnumerable<string> AllUrls()
     {

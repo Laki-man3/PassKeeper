@@ -35,6 +35,8 @@ public partial class EntryEditorView : UserControl
     private readonly string _originalSnapshot;
     private readonly List<(TextBox Name, SecretBox Value, CheckBox Protected, FrameworkElement Row)> _fields = [];
     private EntryCategory _category;
+    /// <summary>The sign-in form the entry is for, as a sequence with automatic sign-in (see <see cref="VaultEntry.FormSequence"/>).</summary>
+    private string _formSequence;
     private bool _loading = true;
     private bool _autoLoginTouched;
     /// <summary>Password suggested for a new site entry; an existing account of a client keeps its own password.</summary>
@@ -65,6 +67,7 @@ public partial class EntryEditorView : UserControl
         WindowsBox.Text = string.Join(Environment.NewLine, entry.WindowPatterns);
         ExtraUrlsBox.Text = string.Join(Environment.NewLine, entry.ExtraUrls);
         SequenceBox.Text = entry.AutoTypeSequence;
+        _formSequence = entry.FormSequence;
         var pinField = entry.FindPinField();
         foreach (var f in entry.CustomFields.Where(f => f != pinField)) AddFieldRow(f.Name, f.Value, f.Protected);
         UpdateNoFields();
@@ -75,12 +78,18 @@ public partial class EntryEditorView : UserControl
             PasswordBox.Value = _generatedPassword = PasswordGenerator.Generate(GeneratorDialog.LastOptions);
         SelectCategory(_category);
         AutoLoginBox.Click += (_, _) => _autoLoginTouched = true;
+        // The sequence made automatically follows the switch, however it is turned (click, keyboard, screen reader).
+        AutoLoginBox.Checked += (_, _) => RenderSequence();
+        AutoLoginBox.Unchecked += (_, _) => RenderSequence();
         if (entry.AutoTypeSequence.Length > 0) SetAdvanced(true);
         ShowExtraUrls(entry.ExtraUrls.Count > 0);
         // Windows typed in by hand (not a known client) stay in sight.
         ShowWindowsList(entry.WindowPatterns.Count > 0 && KnownApps.ForPatterns(entry.WindowPatterns) == null);
         UpdateClientCard();
 
+        RenderSequence();
+        if (entry.AutoTypeSequence.Length > 0 && FieldPlan.Parse(entry.AutoTypeSequence) == null && entry.AutoTypeSequence.Contains("{S:", StringComparison.OrdinalIgnoreCase))
+            ShowSequenceText(true);
         _originalSnapshot = Snapshot();
         _loading = false;
         Loaded += (_, _) =>
@@ -126,6 +135,35 @@ public partial class EntryEditorView : UserControl
             ? Loc.F("Editor.DetectFields", string.Join(", ", fields))
             : Loc.T("Editor.DetectNoFields");
         if (form.HasPin && !form.HasPassword) PinBox.Placeholder = Loc.T("Editor.PinRequired");
+        if (window.App?.Sequence == null && form.Any)
+            _formSequence = AutoTypeSequence.ForForm(form.HasLogin, form.HasPassword, form.HasPin, form.HasOtp, submit: true);
+        RenderSequence();
+    }
+
+    /// <summary>An account that already exists on the site: no suggested password, the cursor in the login box.</summary>
+    public void ForExistingAccount()
+    {
+        if (_generatedPassword != null && PasswordBox.Value == _generatedPassword) PasswordBox.Value = "";
+        _generatedPassword = null;
+        Loaded += (_, _) => Dispatcher.BeginInvoke(() => LoginBox.Focus(), System.Windows.Threading.DispatcherPriority.Input);
+    }
+
+    /// <summary>
+    /// A new entry for a site without one, opened from its sign-in page: the fields found there make its sequence,
+    /// and the form is filled once the entry is saved.
+    /// </summary>
+    public void ShowSiteForm(string site, SignInForm form, bool twoSteps)
+    {
+        DetectBanner.Visibility = Visibility.Visible;
+        DetectTitle.Text = Loc.F("Editor.SiteFormTitle", site);
+        var fields = new List<string>();
+        if (form.HasLogin) fields.Add(Loc.T("Editor.FieldLogin"));
+        if (form.HasPassword) fields.Add(Loc.T("Editor.FieldPassword"));
+        if (form.HasOtp) fields.Add(Loc.T("Editor.FieldOtp"));
+        DetectText.Text = Loc.F("Editor.SiteFormFields", string.Join(", ", fields));
+        FillAfterSaveBox.Content = Loc.T("Editor.FillSiteAfterSave");
+        _formSequence = AutoTypeSequence.ForForm(form.HasLogin, form.HasPassword || twoSteps, otp: form.HasOtp, twoSteps: twoSteps, submit: true);
+        RenderSequence();
     }
 
     // ------------------------------------------------------------------ section
@@ -150,6 +188,7 @@ public partial class EntryEditorView : UserControl
         if (_isNew && !_autoLoginTouched) AutoLoginBox.IsChecked = _category == EntryCategory.Remote;
         ApplyCategory();
         Any_Changed(sender, e);
+        RenderSequence();
     }
 
     private void ApplyCategory()
@@ -159,7 +198,9 @@ public partial class EntryEditorView : UserControl
         Show(ClientPanel, client);
         Show(PinServerRow, client);
         Show(ServerPanel, _category == EntryCategory.Remote);
-        Show(AutoLoginBox, client);
+        // Clients sign in when their window appears, sites when PassKeeper fills their form by itself.
+        Show(AutoLoginBox, client || _category == EntryCategory.Web);
+        AutoLoginHint.Text = Loc.T(client ? "Editor.AutoLoginHint" : "Editor.AutoLoginSiteHint");
         Show(WebPanel, _category == EntryCategory.Web);
         Show(ContactRow, _category is EntryCategory.Web or EntryCategory.Other);
         Show(KeyPanel, _category != EntryCategory.Remote);
@@ -289,7 +330,71 @@ public partial class EntryEditorView : UserControl
     {
         if (AdvancedSummary == null) return;
         var sequence = SequenceBox.Text.Trim();
-        AdvancedSummary.Text = sequence.Length > 0 ? Loc.F("Editor.SummarySequence", sequence) : Loc.T("Editor.SummaryFields");
+        var generated = GeneratedSequence();
+        AdvancedSummary.Text = sequence.Length > 0 ? Loc.F("Editor.SummarySequence", sequence)
+            : generated.Length > 0 ? Loc.F("Editor.SummaryAuto", generated)
+            : Loc.T("Editor.SummaryFields");
+    }
+
+    /// <summary>
+    /// The sequence PassKeeper makes when none is written: from the entry's sign-in form, or with automatic sign-in on
+    /// from its fields as they are (a login and a password); Enter only with automatic sign-in.
+    /// </summary>
+    private string GeneratedSequence()
+    {
+        if (AutoLoginBox == null) return "";
+        var autoLogin = AutoLoginBox.Visibility == Visibility.Visible && AutoLoginBox.IsChecked == true;
+        var form = _formSequence;
+        if (string.IsNullOrWhiteSpace(form) && autoLogin)
+            form = AutoTypeSequence.ForForm(login: LoginBox.Text.Trim().Length > 0 || EmailBox.Text.Trim().Length > 0 || _category == EntryCategory.Web, password: true, submit: true);
+        if (string.IsNullOrWhiteSpace(form)) return "";
+        return autoLogin ? form : AutoTypeSequence.WithoutEnter(form);
+    }
+
+    /// <summary>
+    /// Shows the sequence as elements with a cross each: the written one, otherwise the one PassKeeper makes (removing
+    /// an element of it turns the rest into a written sequence).
+    /// </summary>
+    private void RenderSequence()
+    {
+        if (SequenceChips == null) return;
+        SequenceChips.Children.Clear();
+        var written = SequenceBox.Text.Trim();
+        var generated = written.Length == 0;
+        var tokens = AutoTypeSequence.Tokenize(generated ? GeneratedSequence() : written);
+        for (var i = 0; i < tokens.Count; i++) SequenceChips.Children.Add(SequenceChip(tokens, i, generated));
+        SequenceNote.Text = tokens.Count == 0 ? Loc.T("Editor.SequencePlaceholder")
+            : generated ? Loc.T("Editor.SequenceAuto")
+            : FieldPlan.Parse(written) != null ? Loc.T("Editor.SequenceByFields")
+            : Loc.T("Editor.SequenceKeys");
+        UpdateAdvancedSummary();
+    }
+
+    private FrameworkElement SequenceChip(List<string> tokens, int index, bool generated)
+    {
+        var token = tokens[index];
+        var chip = new Border { CornerRadius = new CornerRadius(7), BorderThickness = new Thickness(1), Padding = new Thickness(9, 0, 2, 0), Margin = new Thickness(0, 0, 6, 6), Height = 28 };
+        chip.SetResourceReference(Border.BackgroundProperty, generated ? "Brush.Surface" : "Brush.SurfaceAlt");
+        chip.SetResourceReference(Border.BorderBrushProperty, generated ? "Brush.BorderStrong" : "Brush.Border");
+        var panel = new StackPanel { Orientation = Orientation.Horizontal };
+        var text = new TextBlock { Text = token, FontFamily = (System.Windows.Media.FontFamily)FindResource("Font.Mono"), FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
+        text.SetResourceReference(TextBlock.ForegroundProperty, generated ? "Brush.TextSecondary" : "Brush.Text");
+        panel.Children.Add(text);
+        var remove = new Button { Style = (Style)FindResource("Btn.Icon"), Content = "\uE711", FontSize = 9, Width = 22, Height = 22, Margin = new Thickness(4, 0, 0, 0), ToolTip = Loc.F("Editor.SequenceRemove", token) };
+        System.Windows.Automation.AutomationProperties.SetName(remove, Loc.F("Editor.SequenceRemove", token));
+        remove.Click += (_, _) => SequenceBox.Text = AutoTypeSequence.Remove(string.Concat(tokens), index);
+        panel.Children.Add(remove);
+        chip.Child = panel;
+        return chip;
+    }
+
+    private void SequenceTextToggle_Click(object sender, RoutedEventArgs e) => ShowSequenceText(SequenceBox.Visibility != Visibility.Visible);
+
+    private void ShowSequenceText(bool show)
+    {
+        SequenceBox.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        SequenceTextToggle.Content = Loc.T(show ? "Editor.SequenceAsChips" : "Editor.SequenceAsText");
+        if (show) Dispatcher.BeginInvoke(() => SequenceBox.Focus(), System.Windows.Threading.DispatcherPriority.Input);
     }
 
     private void BuildChips()
@@ -304,7 +409,7 @@ public partial class EntryEditorView : UserControl
                 ToolTip = Loc.T("Editor.Ph." + token.Trim('{', '}').Split(' ', ':')[0]),
             };
             var text = (string)chip.Content;
-            chip.Click += (_, _) => Insert(text);
+            chip.Click += (_, _) => Add(text);
             chip.ContextMenu = CopyMenu(text);
             PlaceholderChips.Children.Add(chip);
         }
@@ -329,6 +434,22 @@ public partial class EntryEditorView : UserControl
         var menu = new ContextMenu();
         menu.Items.Add(copy);
         return menu;
+    }
+
+    /// <summary>
+    /// Adds a placeholder: at the caret when the sequence is edited as text, otherwise at the end of the sequence (the
+    /// one PassKeeper made becomes a written one). A custom field's name is typed in the text box.
+    /// </summary>
+    private void Add(string token)
+    {
+        if (SequenceBox.Visibility != Visibility.Visible && !token.StartsWith("{S:", StringComparison.Ordinal))
+        {
+            var current = SequenceBox.Text.Trim();
+            SequenceBox.Text = (current.Length > 0 ? current : GeneratedSequence()) + token;
+            return;
+        }
+        ShowSequenceText(true);
+        Insert(token);
     }
 
     /// <summary>Inserts a placeholder at the caret of the sequence box.</summary>
@@ -360,7 +481,7 @@ public partial class EntryEditorView : UserControl
     {
         if (_loading) return;
         Error.Visibility = Visibility.Collapsed;
-        if (sender == SequenceBox) UpdateAdvancedSummary();
+        if (sender == SequenceBox) RenderSequence();
     }
 
     private async void Generate_Click(object sender, RoutedEventArgs e)
@@ -455,6 +576,7 @@ public partial class EntryEditorView : UserControl
         }
 
         var e2 = _entry;
+        var previousUrls = e2.AllUrls().ToList();
         e2.Category = _category;
         e2.Title = title;
         e2.Username = LoginBox.Text.Trim();
@@ -467,10 +589,14 @@ public partial class EntryEditorView : UserControl
         e2.Folder = string.Join("/", FolderBox.Text.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
         e2.Notes = NotesBox.Text;
         e2.Favorite = FavoriteBox.IsChecked == true;
-        e2.AutoLogin = client && AutoLoginBox.IsChecked == true;
+        e2.AutoLogin = (client || _category == EntryCategory.Web) && AutoLoginBox.IsChecked == true;
         e2.WindowPatterns = Lines(WindowsBox.Text);
-        e2.ExtraUrls = _category == EntryCategory.Web ? Lines(ExtraUrlsBox.Text) : [];
+        // A client's or program's other addresses are not edited here: they are the sites its account was chosen on
+        // (a domain account on the company's sign-in page) and stay, with that choice, when the entry is saved.
+        if (_category == EntryCategory.Web) e2.ExtraUrls = Lines(ExtraUrlsBox.Text);
+        e2.ForgetChoicesOfRemovedAddresses(previousUrls);
         e2.AutoTypeSequence = sequence;
+        e2.FormSequence = _formSequence;
         e2.CustomFields = _fields
             .Where(f => f.Name.Text.Trim().Length > 0 || f.Value.Value.Length > 0)
             .Select(f => new CustomField { Name = f.Name.Text.Trim().Length > 0 ? f.Name.Text.Trim() : Loc.T("Editor.FieldDefault"), Value = f.Value.Value, Protected = f.Protected.IsChecked == true })

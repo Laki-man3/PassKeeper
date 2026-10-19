@@ -91,14 +91,14 @@ public sealed class AutoTypeService
                 return;
             }
             // A page without the cursor in its form: the form is found and the cursor put into it.
-            if (field == null && target.IsBrowser && string.IsNullOrWhiteSpace(entry.AutoTypeSequence))
+            if (field == null && target.IsBrowser && FillsByFields(entry))
             {
                 Native.ForceForeground(hwnd);
                 field = await Task.Run(() => FieldFinder.FindSignInField(hwnd) is { } found && PutCursorInto(found) ? found : null);
             }
-            // Without a custom sequence fill by fields: a pre-filled login (VPN clients remember it) is kept and
-            // a PIN, code or key field gets just that value.
-            if (field != null && string.IsNullOrWhiteSpace(entry.AutoTypeSequence))
+            // Without a sequence of keystrokes fill by fields: a pre-filled login (VPN clients remember it) is kept
+            // and a PIN, code or key field gets just that value.
+            if (field != null && FillsByFields(entry))
             {
                 Native.ForceForeground(hwnd);
                 await Task.Delay(120);
@@ -113,6 +113,10 @@ public sealed class AutoTypeService
             _busy = false;
         }
     }
+
+    /// <summary>The entry is filled field by field: it has no sequence, or one made of fields only.</summary>
+    public static bool FillsByFields(VaultEntry entry) =>
+        string.IsNullOrWhiteSpace(entry.AutoTypeSequence) || FieldPlan.Parse(entry.AutoTypeSequence) != null;
 
     /// <summary>"Auto-type" button in the details pane: hide PassKeeper and type into the window below it.</summary>
     public async Task TypeIntoPreviousWindowAsync(VaultEntry entry)
@@ -159,7 +163,7 @@ public sealed class AutoTypeService
         if (target.IsBrowser && DomainUtil.GetHost(target.Url) is { } host)
         {
             if (copy.AllUrls().Any(u => DomainUtil.GetHost(u) == host)) return entry;
-            if (copy.Url.Length == 0) copy.Url = "https://" + host;
+            if (copy.Url.Length == 0 && copy.Category != EntryCategory.Remote) copy.Url = "https://" + host;
             else copy.ExtraUrls.Add("https://" + host);
         }
         else if (!target.IsBrowser && target.ProcessName.Length > 0)
@@ -217,6 +221,11 @@ public sealed class AutoTypeService
             AutoFillLog.Write("  not filled: the site was filled twice in the last 3 minutes");
             return false;
         }
+        if (field.Kind == FieldKind.Phone && !LooksLikePhone(ValueFor(entry, FieldKind.Phone)))
+        {
+            AutoFillLog.Write("  not filled: the field asks for a phone number, the entry has none");
+            return false;
+        }
         if (!_autoFilling.Add(place)) return false;
         try
         {
@@ -226,7 +235,7 @@ public sealed class AutoTypeService
                 return false;
             }
             // The page may still be moving the cursor, or the user may start typing: check again after a moment.
-            await Task.Delay(250);
+            await Task.Delay(120);
             if (IsTyping) return false;
             if (!await Task.Run(() => putCursor ? PutCursorInto(field) : IsFocused(field)))
             {
@@ -237,7 +246,7 @@ public sealed class AutoTypeService
             _autoFilled[place] = DateTime.UtcNow;
             RecordSiteAutoFill(target);
             AutoFillLog.Write($"  filled in by itself: \"{entry.Title}\"");
-            await FillFieldAsync(entry, field, _app.Settings.SubmitAfterFill);
+            await FillAndSignInAsync(entry, field, target);
             return true;
         }
         finally
@@ -247,6 +256,49 @@ public sealed class AutoTypeService
     }
 
     private readonly Dictionary<string, List<DateTime>> _siteFills = [];
+    private readonly Dictionary<Guid, List<DateTime>> _siteSignIns = [];
+    private readonly HashSet<Guid> _siteSignInPaused = [];
+
+    /// <summary>
+    /// Fills a form; on a site, an entry with auto sign-in (and the setting for sites on) also submits it. Only the
+    /// attempts that typed a password are counted: after <see cref="AutoLoginService.MaxAttempts"/> of them in
+    /// <see cref="AutoLoginService.AttemptWindow"/> the form is filled but not submitted, so a wrong saved password
+    /// cannot lock the account.
+    /// </summary>
+    public async Task FillAndSignInAsync(VaultEntry entry, LoginField field, TargetWindow? target)
+    {
+        var signIn = SignsInOnSite(entry, target);
+        var (passwordTyped, entered) = await FillFieldAsync(entry, field, signIn || _app.Settings.SubmitAfterFill);
+        if (!signIn) return;
+        if (!entered)
+        {
+            AutoFillLog.Write("  filled, Enter not pressed (the entry's sequence has none here)");
+            return;
+        }
+        AutoFillLog.Write(passwordTyped ? "  signed in: Enter pressed after the password" : "  Enter pressed after the login (the password comes next)");
+        if (!passwordTyped) return;
+        if (!_siteSignIns.TryGetValue(entry.Id, out var times)) _siteSignIns[entry.Id] = times = [];
+        times.Add(DateTime.UtcNow);
+    }
+
+    private bool SignsInOnSite(VaultEntry entry, TargetWindow? target)
+    {
+        if (target is not { IsBrowser: true } || !entry.SignsInToSite || !_app.Settings.AutoLoginWeb) return false;
+        var count = 0;
+        if (_siteSignIns.TryGetValue(entry.Id, out var times))
+        {
+            times.RemoveAll(t => DateTime.UtcNow - t >= AutoLoginService.AttemptWindow);
+            count = times.Count;
+        }
+        if (count < AutoLoginService.MaxAttempts)
+        {
+            _siteSignInPaused.Remove(entry.Id);
+            return true;
+        }
+        AutoFillLog.Write($"  not signed in: {count} attempts in the last 10 minutes, the form is only filled in");
+        if (_siteSignInPaused.Add(entry.Id)) _app.Tray?.ShowBalloon("PassKeeper", Loc.F("AutoLogin.Paused", entry.Title, AutoLoginService.MaxAttempts));
+        return false;
+    }
 
     /// <summary>
     /// A site is filled by itself at most twice in 3 minutes, whatever its address: sign-in pages with a fresh one-time
@@ -299,8 +351,11 @@ public sealed class AutoTypeService
         {
             if (FieldFinder.IsFocused(field.Element)) return true;
             if (Native.GetForegroundWindow() != field.Window) return false;
+            // A form further down the page is brought into view first (the card and the click need its place).
+            FieldFinder.ScrollIntoView(field.Element);
+            field.Bounds = FieldFinder.Bounds(field.Element) is { IsEmpty: false } moved ? moved : field.Bounds;
             var unreported = FieldFinder.FocusStaysOnWindow(field.Window);
-            if (!unreported && FieldFinder.FocusAndVerify(field.Element)) return true;
+            if (!unreported && FieldFinder.TryFocus(field.Element, field.Window)) return true;
             if (!FieldFinder.Click(field.Element, field.Window)) return false;
             // A browser that does not report the cursor (Yandex): the click on the uncovered field put it there.
             if (unreported) return true;
@@ -323,10 +378,17 @@ public sealed class AutoTypeService
         // A browser that does not report the cursor in its pages: the field is clicked (only if nothing covers it).
         var window = sender.TargetWindow;
         if (window != IntPtr.Zero && FieldFinder.FocusStaysOnWindow(window)) return FieldFinder.Click(target, window);
-        if (FieldFinder.FocusAndVerify(target)) return true;
+        if (FieldFinder.TryFocus(target, window)) return true;
         if (back) sender.ShiftTab();
         else sender.PressKey("TAB");
         for (var i = 0; i < 6; i++)
+        {
+            if (FieldFinder.IsFocused(target)) return true;
+            Thread.Sleep(40);
+        }
+        // Something else sits between the fields in the tab order (a "forgot password" link): the field is clicked.
+        if (window == IntPtr.Zero || !FieldFinder.Click(target, window)) return false;
+        for (var i = 0; i < 5; i++)
         {
             if (FieldFinder.IsFocused(target)) return true;
             Thread.Sleep(40);
@@ -362,9 +424,9 @@ public sealed class AutoTypeService
     {
         var value = FieldFinder.GetValue(field.Element);
         if (value == null) return false;
-        if (!field.IsPassword) return value.Length == 0 || value == ValueFor(entry, field.Kind);
+        if (!field.IsPassword) return value.Length == 0 || value == ValueFor(entry, field.Kind) || field.Kind == FieldKind.Phone && IsCountryCode(value);
         if (value.Length > 0) return false;
-        var user = FieldFinder.FindUsernameBefore(field.Element);
+        var user = FieldFinder.FindUsernameBefore(field.Element, FieldFinder.FormOf(field));
         var typed = user == null ? "" : FieldFinder.GetValue(user) ?? "";
         return typed.Length == 0 || typed == ValueFor(entry, FieldKind.Login);
     }
@@ -381,7 +443,7 @@ public sealed class AutoTypeService
             await Task.Delay(250);
             var field = await Task.Run(() => FocusedField(hwnd) ?? FieldFinder.FirstSignInField(hwnd));
             if (field != null) await Task.Run(() => FieldFinder.Focus(field.Element));
-            if (!string.IsNullOrWhiteSpace(entry.AutoTypeSequence))
+            if (!FillsByFields(entry))
             {
                 var target = await Task.Run(() => TargetDetector.Capture(hwnd, detectUrl: false));
                 await TypeAsync(entry, target, entry.AutoTypeSequence);
@@ -487,6 +549,37 @@ public sealed class AutoTypeService
         }
     }
 
+    /// <summary>A phone field that shows only its country code ("+7"), which the site put there.</summary>
+    private static bool IsCountryCode(string value) =>
+        System.Text.RegularExpressions.Regex.IsMatch(value.Trim(), @"^\+?\d{0,4}$");
+
+    private static bool LooksLikePhone(string value) =>
+        value.Count(char.IsDigit) >= 7 && value.All(c => char.IsDigit(c) || "+-() ".Contains(c));
+
+    /// <summary>
+    /// A token PIN, a one-time code or a key asked for in the same form after the password (a VPN client's dialog):
+    /// filled when the entry's sequence lists it. Returns the last field filled here.
+    /// </summary>
+    private static FieldKind? FillFollowing(VaultEntry entry, FieldPlan? plan, AutomationElement after, FormFields? form, KeyboardSender sender, List<System.Windows.Rect> filled)
+    {
+        if (plan == null || form == null) return null;
+        FieldKind? last = null;
+        var from = form.IndexOf(after);
+        foreach (var kind in plan.Kinds.Where(k => k is FieldKind.Pin or FieldKind.Otp or FieldKind.Key))
+        {
+            var value = ValueFor(entry, kind);
+            if (from < 0 || value.Length == 0) break;
+            var next = form.Fields.Skip(from + 1).Take(3).FirstOrDefault(f => f.Usable && f.Kind == kind);
+            if (next == null || !MoveTo(next.Element, sender, back: false)) break;
+            filled.Add(next.Bounds);
+            sender.ClearField();
+            sender.TypeText(value);
+            last = kind;
+            from = form.Fields.IndexOf(next);
+        }
+        return last;
+    }
+
     /// <summary>Whether the entry has something to put into a field of this kind.</summary>
     public static bool CanFill(VaultEntry e, FieldKind kind) => kind switch
     {
@@ -513,51 +606,79 @@ public sealed class AutoTypeService
         };
     }
 
-    /// <summary>Suggestion click: fill the focused field (and its login/password counterpart) in place.</summary>
-    public async Task FillFieldAsync(VaultEntry entry, LoginField field, bool? submitAfter = null)
+    /// <summary>
+    /// Suggestion click: fill the focused field (and its login/password counterpart) in place. Returns whether a
+    /// password was typed (a sign-in attempt rather than the first step of a two-step form) and Enter pressed.
+    /// </summary>
+    public async Task<FillResult> FillFieldAsync(VaultEntry entry, LoginField field, bool? submitAfter = null)
     {
-        if (Native.IsHungAppWindow(field.Window)) return;
+        if (Native.IsHungAppWindow(field.Window)) return default;
         if (Native.IsInputBlocked(field.Window))
         {
             CopyInsteadOfTyping(entry, Native.GetWindowTitle(field.Window), field.Kind);
-            return;
+            return default;
         }
         var login = ValueFor(entry, FieldKind.Login);
         var sender = CreateSender(field.Window);
         var submit = submitAfter ?? _app.Settings.SubmitAfterFill;
         var filled = new List<System.Windows.Rect> { field.Bounds };
+        var passwordTyped = false;
+        var entered = false;
+        // A sequence of fields says which fields to fill and after which one to press Enter: the user's own one as it
+        // is written (a caller may still rule Enter out), the one made from the form when Enter is wanted.
+        var plan = FieldPlan.For(entry);
+        bool Wants(FieldKind kind) => plan == null || plan.Includes(kind);
+        bool EnterAfter(FieldKind? last) => last != null && (plan == null ? submit
+            : plan.Generated ? submit && (plan.EnterAfter(last.Value) || !plan.HasEnter)
+            : submitAfter != false && plan.EnterAfter(last.Value));
+        FieldKind? last = null;
         Interlocked.Increment(ref _typing);
         try
         {
             await Task.Run(() =>
             {
                 KeyboardSender.WaitForModifiersReleased();
+                // The form is read before the first key: right after typing, a browser is busy updating the page and
+                // answers UI Automation several times slower.
+                var form = field.Kind is FieldKind.Otp or FieldKind.Key or FieldKind.Pin ? null : FieldFinder.FormOf(field);
                 if (field.Kind is FieldKind.Otp or FieldKind.Key or FieldKind.Pin)
                 {
                     sender.ClearField();
                     sender.TypeText(ValueFor(entry, field.Kind));
+                    last = field.Kind;
                 }
                 else if (field.IsPassword)
                 {
                     // The cursor is moved only when the move is confirmed: a login must never land in a password field.
-                    var user = FieldFinder.FindUsernameBefore(field.Element);
+                    var user = Wants(FieldKind.Login) ? FieldFinder.FindUsernameBefore(field.Element, form) : null;
                     if (user != null && login.Length > 0 && FieldFinder.GetValue(user) != login && MoveTo(user, sender, back: true))
                     {
                         filled.Add(FieldFinder.Bounds(user));
                         sender.ClearField();
                         sender.TypeText(login);
                         FieldFinder.WaitForValue(user, login);
+                        last = FieldKind.Login;
                         if (!MoveTo(field.Element, sender, back: false) || FieldFinder.IsFocused(user)) return;
                     }
-                    TypePassword(sender, field.Element, field.Window, entry.Password);
+                    if (Wants(FieldKind.Password))
+                    {
+                        TypePassword(sender, field.Element, field.Window, entry.Password);
+                        passwordTyped = entry.Password.Length > 0;
+                        last = FieldKind.Password;
+                        last = FillFollowing(entry, plan, field.Element, form, sender, filled) ?? last;
+                    }
                 }
                 else
                 {
-                    var typed = ValueFor(entry, field.Kind);
-                    sender.ClearField();
-                    sender.TypeText(typed);
-                    FieldFinder.WaitForValue(field.Element, typed);
-                    var password = FieldFinder.FindPasswordAfter(field.Element);
+                    if (Wants(field.Kind))
+                    {
+                        var typed = ValueFor(entry, field.Kind);
+                        sender.ClearField();
+                        sender.TypeText(typed);
+                        FieldFinder.WaitForValue(field.Element, typed);
+                        last = field.Kind;
+                    }
+                    var password = Wants(FieldKind.Password) ? FieldFinder.FindPasswordAfter(field.Element, form) : null;
                     if (password != null && entry.Password.Length > 0)
                     {
                         if (!MoveTo(password, sender, back: false)) return;
@@ -565,9 +686,14 @@ public sealed class AutoTypeService
                         if (FieldFinder.IsFocused(field.Element)) return;
                         filled.Add(FieldFinder.Bounds(password));
                         TypePassword(sender, password, field.Window, entry.Password);
+                        passwordTyped = true;
+                        last = FieldKind.Password;
+                        last = FillFollowing(entry, plan, password, form, sender, filled) ?? last;
                     }
                 }
-                if (submit) sender.PressKey("ENTER");
+                if (!EnterAfter(last)) return;
+                sender.PressKey("ENTER");
+                entered = true;
             });
             _lastFill = (field.Window, DateTime.UtcNow, filled);
             _app.Vault.MarkUsed(entry.Id);
@@ -585,6 +711,36 @@ public sealed class AutoTypeService
         {
             Interlocked.Decrement(ref _typing);
         }
+        return new FillResult(passwordTyped, entered);
+    }
+}
+
+/// <summary>What a fill did: a password was typed (a sign-in attempt), Enter was pressed.</summary>
+public readonly record struct FillResult(bool PasswordTyped, bool Entered);
+
+/// <summary>An input field of a page or window as read in one pass (see <see cref="FieldFinder.ReadForm"/>).</summary>
+internal sealed record FormField(AutomationElement Element, bool IsPassword, string Name, string AutomationId, string HelpText, System.Windows.Rect Bounds, bool Offscreen)
+{
+    /// <summary>The field has a place on the page (hidden inputs have none); it may still be scrolled out of view.</summary>
+    public bool Usable => !Bounds.IsEmpty && Bounds.Width >= 20 && Bounds.Height >= 8;
+
+    public FieldKind? Kind => FieldClassifier.Classify(IsPassword, Name, AutomationId, HelpText);
+}
+
+/// <summary>The input fields of a form in document order.</summary>
+internal sealed class FormFields(List<FormField> fields)
+{
+    public List<FormField> Fields { get; } = fields;
+
+    /// <summary>Position of the element (browsers may expose one input as two elements: compared by place as well).</summary>
+    public int IndexOf(AutomationElement element)
+    {
+        for (var i = 0; i < Fields.Count; i++)
+            if (Automation.Compare(Fields[i].Element, element)) return i;
+        System.Windows.Rect bounds;
+        try { bounds = element.Current.BoundingRectangle; }
+        catch (Exception ex) when (ex is ElementNotAvailableException or TimeoutException or InvalidOperationException or System.Runtime.InteropServices.COMException) { return -1; }
+        return Fields.FindIndex(f => f.Bounds == bounds);
     }
 }
 
@@ -595,41 +751,165 @@ internal static class FieldFinder
         new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Edit),
         new PropertyCondition(AutomationElement.IsEnabledProperty, true));
 
-    private static readonly Condition VisibleEditCondition = new AndCondition(
-        new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Edit),
-        new PropertyCondition(AutomationElement.IsEnabledProperty, true),
-        new PropertyCondition(AutomationElement.IsOffscreenProperty, false));
-
-    private static readonly Condition VisiblePasswordCondition = new AndCondition(
-        VisibleEditCondition,
-        new PropertyCondition(AutomationElement.IsPasswordProperty, true));
-
     /// <summary>
-    /// The sign-in form of a page the cursor is not in: the login field before the first visible password field (or
-    /// that password field), otherwise (sign-in in two steps) the first visible login, e-mail or phone field.
+    /// The sign-in form of a page the cursor is not in: the login field before the first password field (or that
+    /// password field), otherwise (sign-in in two steps) the first login, e-mail or phone field. The page's fields are
+    /// read in one pass and kept with the result for filling; fields in view come first, a form further down the page
+    /// is scrolled to when it is filled.
     /// </summary>
     public static LoginField? FindSignInField(AutomationElement page, IntPtr window)
     {
         try
         {
-            var password = page.FindFirst(TreeScope.Descendants, VisiblePasswordCondition);
+            var form = ReadForm(page);
+            var fields = form.Fields.Where(f => f.Usable).OrderBy(f => f.Offscreen).ToList();
+            var password = fields.FirstOrDefault(f => f.IsPassword);
             if (password != null)
             {
-                var user = FindUsernameBefore(password);
-                if (user != null && LoginNear(user, password) is { } login) return Describe(user, window, login);
-                return Describe(password, window, FieldKind.Password);
+                var index = form.Fields.IndexOf(password);
+                var user = Before(form, index);
+                if (user != null && LoginNear(user, password) is { } login) return Describe(user, window, login, form);
+                return Describe(password, window, FieldKind.Password, form);
             }
-            var checkedFields = 0;
-            foreach (AutomationElement edit in page.FindAll(TreeScope.Descendants, VisibleEditCondition))
+            foreach (var field in fields.Take(20))
+                if (field.Kind is FieldKind.Login or FieldKind.Email or FieldKind.Phone) return Describe(field, window, field.Kind.Value, form);
+            // A field without a label of its own, explained by the text next to it ("Enter your phone number"): a few
+            // of the first ones in view are looked at more closely.
+            foreach (var field in fields.Where(f => !f.IsPassword && !f.Offscreen && string.IsNullOrWhiteSpace(f.Name)).Take(3))
             {
-                if (++checkedFields > 20) break;
-                var info = edit.Current;
-                var kind = FieldClassifier.Classify(info.IsPassword, info.Name, info.AutomationId, info.HelpText);
-                if (kind is FieldKind.Login or FieldKind.Email or FieldKind.Phone) return Describe(edit, window, kind.Value);
+                var kind = FieldClassifier.Classify(false, LabelAround(field.Element));
+                if (kind is FieldKind.Login or FieldKind.Email or FieldKind.Phone) return Describe(field, window, kind.Value, form);
             }
         }
         catch (Exception ex) when (ex is ElementNotAvailableException or TimeoutException or InvalidOperationException or System.Runtime.InteropServices.COMException or ArgumentException) { }
         return null;
+    }
+
+    private static readonly CacheRequest FormProperties = CreateFormRequest();
+
+    private static CacheRequest CreateFormRequest()
+    {
+        var request = new CacheRequest { TreeScope = TreeScope.Element, AutomationElementMode = AutomationElementMode.Full };
+        request.Add(AutomationElement.IsPasswordProperty);
+        request.Add(AutomationElement.NameProperty);
+        request.Add(AutomationElement.AutomationIdProperty);
+        request.Add(AutomationElement.HelpTextProperty);
+        request.Add(AutomationElement.BoundingRectangleProperty);
+        request.Add(AutomationElement.IsOffscreenProperty);
+        return request;
+    }
+
+    /// <summary>
+    /// The input fields under a page or window in document order, with what is needed to tell them apart, in one
+    /// UI Automation pass (each property otherwise costs a call into the other process). Browsers expose some inputs
+    /// twice (the field and its inner text at the same place): only the first element of each place is kept.
+    /// </summary>
+    internal static FormFields ReadForm(AutomationElement container)
+    {
+        var list = new List<FormField>();
+        var places = new HashSet<System.Windows.Rect>();
+        AutomationElementCollection found;
+        using (FormProperties.Activate()) found = container.FindAll(TreeScope.Descendants, EditCondition);
+        foreach (AutomationElement e in found)
+        {
+            try
+            {
+                var info = e.Cached;
+                if (!places.Add(info.BoundingRectangle)) continue;
+                list.Add(new FormField(e, info.IsPassword, info.Name ?? "", info.AutomationId ?? "", info.HelpText ?? "", info.BoundingRectangle, info.IsOffscreen));
+            }
+            catch (ElementNotAvailableException) { }
+            catch (InvalidOperationException) { } // a provider that cannot cache
+        }
+        return new FormFields(list);
+    }
+
+    /// <summary>The fields of the field's form, read once per field (a form filled now does not change its fields).</summary>
+    internal static FormFields FormOf(LoginField field)
+    {
+        if (field.Form == null)
+        {
+            var container = Container(field.Element);
+            field.Form = container == null ? new FormFields([]) : ReadForm(container);
+        }
+        return field.Form;
+    }
+
+    /// <summary>The text box among the three fields before <paramref name="index"/> (the login of a password field).</summary>
+    private static FormField? Before(FormFields form, int index)
+    {
+        for (var i = index - 1; i >= 0 && i >= index - 3; i--)
+            if (form.Fields[i].Usable && !form.Fields[i].IsPassword) return form.Fields[i];
+        return null;
+    }
+
+    private static readonly CacheRequest LabelProperties = CreateLabelRequest();
+
+    private static CacheRequest CreateLabelRequest()
+    {
+        var request = new CacheRequest { TreeScope = TreeScope.Element, AutomationElementMode = AutomationElementMode.Full };
+        request.Add(AutomationElement.NameProperty);
+        request.Add(AutomationElement.ControlTypeProperty);
+        return request;
+    }
+
+    /// <summary>
+    /// The text shown just before a field that has no label of its own (sites that draw the label as a separate text,
+    /// such as "Enter your phone number" above the field): up to two texts preceding it in the same group.
+    /// </summary>
+    public static string LabelAround(AutomationElement field)
+    {
+        try
+        {
+            var parent = TreeWalker.ControlViewWalker.GetParent(field);
+            if (parent == null) return "";
+            AutomationElementCollection children;
+            using (LabelProperties.Activate()) children = parent.FindAll(TreeScope.Children, Condition.TrueCondition);
+            var texts = new List<string>();
+            foreach (AutomationElement child in children)
+            {
+                if (Automation.Compare(child, field)) break;
+                if (child.Cached.ControlType == ControlType.Text && !string.IsNullOrWhiteSpace(child.Cached.Name)) texts.Add(child.Cached.Name);
+            }
+            return string.Join(" ", texts.TakeLast(2));
+        }
+        catch (Exception ex) when (ex is ElementNotAvailableException or TimeoutException or InvalidOperationException or System.Runtime.InteropServices.COMException or ArgumentException)
+        {
+            return "";
+        }
+    }
+
+    /// <summary>
+    /// Which fields the field's sign-in form has, and whether it asks for the login first and the password on the next
+    /// page (a login field without a password field).
+    /// </summary>
+    public static (SignInForm Form, bool TwoSteps) DescribeForm(LoginField field)
+    {
+        try
+        {
+            var fields = FormOf(field).Fields.Where(f => f.Usable).ToList();
+            var password = fields.Any(f => f.IsPassword && f.Kind == FieldKind.Password) || field.IsPassword;
+            var otp = fields.Any(f => f.Kind == FieldKind.Otp);
+            var login = field.Kind is FieldKind.Login or FieldKind.Email or FieldKind.Phone ||
+                fields.Any(f => !f.IsPassword && f.Kind is FieldKind.Login or FieldKind.Email or FieldKind.Phone);
+            return (new SignInForm(login, password, false, otp), login && !password);
+        }
+        catch (Exception ex) when (ex is ElementNotAvailableException or TimeoutException or InvalidOperationException or System.Runtime.InteropServices.COMException)
+        {
+            return (new SignInForm(true, true, false, false), false);
+        }
+    }
+
+    /// <summary>Scrolls a field that lies outside the visible part of the page into view.</summary>
+    public static void ScrollIntoView(AutomationElement element)
+    {
+        try
+        {
+            if (!element.Current.IsOffscreen) return;
+            if (element.TryGetCurrentPattern(ScrollItemPattern.Pattern, out var p)) ((ScrollItemPattern)p).ScrollIntoView();
+            Thread.Sleep(120);
+        }
+        catch (Exception ex) when (ex is ElementNotAvailableException or TimeoutException or InvalidOperationException or System.Runtime.InteropServices.COMException) { }
     }
 
     /// <summary>The sign-in form of the page shown in a browser window (hotkey without the cursor in a field).</summary>
@@ -677,24 +957,20 @@ internal static class FieldFinder
     /// The text box before a password field is its login when it is labelled as one, or when it has no label and sits
     /// right above or beside the password (a search box elsewhere on the page is not).
     /// </summary>
-    private static FieldKind? LoginNear(AutomationElement user, AutomationElement password)
+    private static FieldKind? LoginNear(FormField user, FormField password)
     {
-        var info = user.Current;
-        var kind = FieldClassifier.Classify(false, info.Name, info.AutomationId, info.HelpText);
+        var kind = FieldClassifier.Classify(false, user.Name, user.AutomationId, user.HelpText);
         if (kind is FieldKind.Login or FieldKind.Email or FieldKind.Phone) return kind;
-        if (kind != null || !string.IsNullOrWhiteSpace(info.Name)) return null;
-        var u = info.BoundingRectangle;
-        var p = password.Current.BoundingRectangle;
+        if (kind != null || !string.IsNullOrWhiteSpace(user.Name)) return null;
+        var u = user.Bounds;
+        var p = password.Bounds;
         var below = p.Top - u.Bottom is >= -2 and < 160 && Math.Abs(p.Left - u.Left) < 60;
         var beside = Math.Abs(p.Top - u.Top) < 8 && p.Left - u.Right is >= -2 and < 80;
         return below || beside ? FieldKind.Login : null;
     }
 
-    private static LoginField? Describe(AutomationElement element, IntPtr window, FieldKind kind)
-    {
-        var bounds = element.Current.BoundingRectangle;
-        return bounds.IsEmpty || bounds.Width < 20 ? null : new LoginField { Element = element, Kind = kind, Bounds = bounds, Window = window };
-    }
+    private static LoginField? Describe(FormField field, IntPtr window, FieldKind kind, FormFields form) =>
+        field.Usable ? new LoginField { Element = field.Element, Kind = kind, Bounds = field.Bounds, Window = window, Form = form } : null;
 
     /// <summary>
     /// The browser reports focus on its window only, never on the field with the cursor (Yandex Browser): the cursor
@@ -720,6 +996,7 @@ internal static class FieldFinder
     {
         try
         {
+            ScrollIntoView(field);
             var r = field.Current.BoundingRectangle;
             if (r.IsEmpty) return false;
             var x = (int)(r.Left + Math.Min(r.Width / 2, 24));
@@ -780,32 +1057,12 @@ internal static class FieldFinder
         return lastWindow;
     }
 
-    /// <summary>
-    /// Input fields of the form around the element, in document order. Browsers expose some inputs twice (the field
-    /// and its inner text at the same place): only the first element of each place is kept.
-    /// </summary>
-    private static List<AutomationElement> Edits(AutomationElement element, out int index)
+    /// <summary>The form of the element: given (read for its field a moment ago) or read now.</summary>
+    private static FormFields FormAround(AutomationElement element, FormFields? form)
     {
-        index = -1;
+        if (form != null) return form;
         var container = Container(element);
-        if (container == null) return [];
-        var list = new List<AutomationElement>();
-        var places = new HashSet<System.Windows.Rect>();
-        foreach (AutomationElement e in container.FindAll(TreeScope.Descendants, EditCondition))
-        {
-            try
-            {
-                var info = e.Current;
-                if (info.IsOffscreen || !places.Add(info.BoundingRectangle)) continue;
-                list.Add(e);
-            }
-            catch (ElementNotAvailableException) { }
-            catch (TimeoutException) { } // the program does not answer UI Automation in time
-        }
-        var bounds = element.Current.BoundingRectangle;
-        for (var i = 0; i < list.Count && index < 0; i++)
-            if (Automation.Compare(list[i], element) || list[i].Current.BoundingRectangle == bounds) index = i;
-        return list;
+        return container == null ? new FormFields([]) : ReadForm(container);
     }
 
     /// <summary>
@@ -834,26 +1091,32 @@ internal static class FieldFinder
         }
     }
 
-    public static AutomationElement? FindUsernameBefore(AutomationElement password)
+    public static AutomationElement? FindUsernameBefore(AutomationElement password, FormFields? form = null)
     {
         try
         {
-            var edits = Edits(password, out var index);
-            for (var i = index - 1; i >= 0 && i >= index - 3; i--)
-                if (!edits[i].Current.IsPassword) return edits[i];
+            var fields = FormAround(password, form);
+            var index = fields.IndexOf(password);
+            if (index < 0 && form != null) return FindUsernameBefore(password); // the form changed: read it again
+            return index < 0 ? null : Before(fields, index)?.Element;
         }
         catch (Exception ex) when (ex is ElementNotAvailableException or TimeoutException or InvalidOperationException or System.Runtime.InteropServices.COMException) { }
         return null;
     }
 
-    public static AutomationElement? FindPasswordAfter(AutomationElement login)
+    /// <summary>
+    /// The password field among the three fields after a login. A form read before may not have it yet (some sites
+    /// show the password field once the login is typed): it is read again then.
+    /// </summary>
+    public static AutomationElement? FindPasswordAfter(AutomationElement login, FormFields? form = null)
     {
         try
         {
-            var edits = Edits(login, out var index);
-            if (index < 0) return null;
-            for (var i = index + 1; i < edits.Count && i <= index + 3; i++)
-                if (edits[i].Current.IsPassword) return edits[i];
+            var fields = FormAround(login, form);
+            var index = fields.IndexOf(login);
+            for (var i = index + 1; index >= 0 && i < fields.Fields.Count && i <= index + 3; i++)
+                if (fields.Fields[i].Usable && fields.Fields[i].IsPassword) return fields.Fields[i].Element;
+            if (form != null) return FindPasswordAfter(login);
         }
         catch (Exception ex) when (ex is ElementNotAvailableException or TimeoutException or InvalidOperationException or System.Runtime.InteropServices.COMException) { }
         return null;
@@ -898,14 +1161,50 @@ internal static class FieldFinder
         catch (Exception ex) when (ex is ElementNotAvailableException or TimeoutException or InvalidOperationException or System.Runtime.InteropServices.COMException) { }
     }
 
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<uint, bool> FocusIgnored = new();
+
+    /// <summary>
+    /// Moves the cursor to the field through UI Automation, unless the browser is known to ignore that (Chrome does
+    /// for its pages): asking it again would cost a wait of a third of a second every time, before Tab or a click.
+    /// </summary>
+    public static bool TryFocus(AutomationElement element, IntPtr window)
+    {
+        Native.GetWindowThreadProcessId(window, out var pid);
+        if (pid != 0 && FocusIgnored.ContainsKey(pid)) return false;
+        if (FocusAndVerify(element)) return true;
+        if (pid != 0 && IsBrowser(pid)) FocusIgnored[pid] = true;
+        return false;
+    }
+
+    private static bool IsBrowser(uint pid)
+    {
+        try
+        {
+            using var p = System.Diagnostics.Process.GetProcessById((int)pid);
+            return TargetDetector.IsBrowserProcess(p.ProcessName);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
     /// <summary>Moves the cursor to the field and confirms it arrived there.</summary>
     public static bool FocusAndVerify(AutomationElement element)
     {
-        Focus(element);
+        try
+        {
+            element.SetFocus();
+        }
+        catch (Exception ex) when (ex is ElementNotAvailableException or TimeoutException or InvalidOperationException or System.Runtime.InteropServices.COMException)
+        {
+            return false;
+        }
+        // Checked often: a program that takes the focus does so at once, one that ignores it costs only this wait.
         for (var i = 0; i < 6; i++)
         {
+            Thread.Sleep(30);
             if (IsFocused(element)) return true;
-            Thread.Sleep(50);
         }
         return false;
     }

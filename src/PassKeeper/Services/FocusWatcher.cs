@@ -8,8 +8,11 @@ public sealed class LoginField
 {
     public required AutomationElement Element { get; init; }
     public required FieldKind Kind { get; init; }
-    public required Rect Bounds { get; init; }
+    /// <summary>Screen place of the field (updated when the field is scrolled into view).</summary>
+    public required Rect Bounds { get; set; }
     public required IntPtr Window { get; init; }
+    /// <summary>The fields of its form, read once and reused while the form is filled (see <see cref="FieldFinder.FormOf"/>).</summary>
+    internal FormFields? Form { get; set; }
     public bool IsPassword => Kind == FieldKind.Password;
 
     /// <summary>
@@ -152,6 +155,22 @@ public sealed class FocusWatcher : IDisposable
             // VPN clients often leave the login box without a label: in a known client's window it is the login.
             if (kind == null && !browser && !info.IsPassword && string.IsNullOrWhiteSpace(info.Name) && IsKnownClient(info.ProcessId))
                 kind = FieldKind.Login;
+            // A page field without a label of its own may be explained by the text before it ("Enter your phone
+            // number"): looked at a moment later, off this event thread.
+            if (kind == null && browser && !info.IsPassword && string.IsNullOrWhiteSpace(info.Name) && !bounds.IsEmpty && bounds.Width >= 20)
+            {
+                var front = Native.GetForegroundWindow();
+                Native.GetWindowThreadProcessId(front, out var frontPid);
+                Task.Delay(90).ContinueWith(_ =>
+                {
+                    if (!IsCurrent(sequence)) return;
+                    var labelled = frontPid == info.ProcessId ? FieldClassifier.Classify(false, FieldFinder.LabelAround(element)) : null;
+                    if (labelled is FieldKind.Login or FieldKind.Email or FieldKind.Phone && IsCurrent(sequence))
+                        LoginFieldFocused?.Invoke(new LoginField { Element = element, Kind = labelled.Value, Bounds = bounds, Window = front });
+                    else if (IsCurrent(sequence)) FocusLeft?.Invoke();
+                }, TaskScheduler.Default);
+                return;
+            }
             if (kind == null || bounds.IsEmpty || bounds.Width < 20)
             {
                 FocusLeft?.Invoke();
@@ -214,7 +233,8 @@ public sealed class FocusWatcher : IDisposable
         }
     });
 
-    private static readonly int[] ProbeDelays = [400, 600, 1000, 1500, 2500];
+    /// <summary>Pauses between looks at a page that got the focus (the first one is short: the page is reported then).</summary>
+    private static readonly int[] ProbeDelays = [250, 350, 600, 1000, 1500, 2500];
 
     /// <summary>
     /// The active browser window changed its page (or came to the front): look where the cursor is. Needed for
@@ -243,9 +263,10 @@ public sealed class FocusWatcher : IDisposable
                     if (info.ProcessId == _ownPid || !IsBrowser(info.ProcessId)) continue;
                     if (info.ControlType == ControlType.Document || info.ControlType == ControlType.Window || info.ControlType == ControlType.Pane)
                     {
-                        // The page shows no cursor in a field: once it has had a moment to appear, report the page.
-                        // Some browsers keep the focus on the window: its page is then found below it.
-                        if (!pageReported && delay >= 600)
+                        // The page shows no cursor in a field: report it at once, its form is looked for (and waited
+                        // for, if it is still being drawn) by the receiver. Some browsers keep the focus on the window:
+                        // its page is then found below it.
+                        if (!pageReported)
                         {
                             var window = Native.GetForegroundWindow();
                             var page = info.ControlType == ControlType.Document ? focused : FieldFinder.PageOf(window);

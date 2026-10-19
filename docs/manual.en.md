@@ -42,13 +42,20 @@ Search (Ctrl+F) looks in the title, login, addresses, e-mail, phone, notes, fold
 
 The borders between the left pane, the list and the entry card can be dragged with the mouse; the widths are remembered. In a small window the panes narrow by themselves (the entry card keeps its minimum width), and fields and buttons in a narrow pane are placed one under another; widening the window brings the widths back.
 
+### Several entries at once {#bulk}
+
+- The box left of the section title above the list (**Select all**, Ctrl+A) selects every entry in the list, for example all entries of "VPN and remote access" or those found by a search.
+- Ctrl+click adds an entry to the selection or removes it, Shift+click selects a range.
+- While several entries are selected, their icons turn into round checks: a click on one adds or removes that entry.
+- The right pane offers actions for all of them: **Add to favorites**, **Remove from favorites**, **Delete** (to the trash, after a confirmation); in the trash **Restore** and **Delete forever**. The context menu has the same actions; Delete removes the selected entries, Esc clears the selection.
+
 ## Adding and editing entries {#entries}
 
 **+** (Ctrl+N) creates an entry in the current section. The section at the top of the editor decides which fields are shown.
 
 ### Website
 
-Title, login, password, website address, e-mail, phone, key, 2FA code (TOTP), folder, notes, custom fields. The website address is all the browser suggestions need.
+Title, login, password, website address, e-mail, phone, key, 2FA code (TOTP), folder, notes, custom fields. The website address is all the browser suggestions need. **Sign in automatically** presses Enter after the sign-in form is filled in, see [Automatic sign-in to websites](#autologin-web).
 
 ### VPN and remote access
 
@@ -68,7 +75,7 @@ Login, password, notes and custom fields for Wi-Fi, licences and the like.
 
 ### Duplicating and copying to a VPN entry {#duplicate}
 
-- **⋯ → Duplicate** (or right-click an entry) opens a copy marked "(copy)" in the editor.
+- **⋯ → Duplicate** (or right-click an entry) opens a copy marked "(copy)" in the editor. The sites where the original is filled in by itself stay with the original.
 - **⋯ → Use for a VPN client or program…**: choose the client and a new entry for it opens with the login and password of the original. Add what is missing (PIN, server address) in the editor.
 - **⋯ → Use for a website…** (on VPN and program entries) is the other direction: a new site entry with the same login and password; only the address is left to fill in.
 - **Take login and password from another entry…** in the editor copies the login, password, e-mail and 2FA secret of the chosen entry.
@@ -83,7 +90,7 @@ The key button next to the password or **Password generator** in the left pane: 
 
 ## Autofill in browsers {#browser}
 
-**Automatically.** When a sign-in page opens, PassKeeper finds its form: if the cursor is not in a field, it puts it into the login field (with a click when the browser ignores the request, and only when nothing covers the field) and fills in the login and password. Each page is filled once; fields the browser or you already filled are left alone. Enter is pressed only with **Press Enter after filling** on. Turned off in **Settings → Autofill → Fill in sign-in forms automatically**.
+**Automatically.** When a sign-in page opens, PassKeeper finds its form: if the cursor is not in a field, it puts it into the login field (with a click when the browser ignores the request, and only when nothing covers the field) and fills in the login and password. Each page is filled once; fields the browser or you already filled are left alone. Enter is pressed only with **Press Enter after filling** on or with **Sign in automatically** on in the entry ([Automatic sign-in to websites](#autologin-web)). Turned off in **Settings → Autofill → Fill in sign-in forms automatically**.
 
 **Which entry is filled in.**
 
@@ -93,7 +100,7 @@ The key button next to the password or **Password generator** in the left pane: 
 | Only one entry of the domain matches | it is filled in |
 | Two or more entries for this address, or only several entries of the domain | nothing is typed: a list appears next to the login field, the entry used last on top |
 | You chose an entry in the list | it becomes the account for this site and is filled in by itself next time, even if other accounts are saved for the site |
-| No entry | the password field offers **Choose an entry…**: any entry will do, and with **Remember the choice** ticked the address is added to it |
+| No entry | the login or password field of a sign-in form offers **Create an entry for the site** (see below) or **Choose an entry…**: any entry will do, and with **Remember the choice** ticked the address is added to it |
 
 **Suggestion.** When the cursor enters a login, password, e-mail, phone, one-time code or key field, a PassKeeper suggestion with matching entries appears next to it. Clicking an entry fills the field; for a login or password field both are filled. If you went to another page or window, the suggestion closes and types nothing.
 
@@ -102,9 +109,18 @@ The key button next to the password or **Password generator** in the left pane: 
 - An entry matches when the page address is the entry's address or one of its **Other addresses of this site**; entries of other subdomains of the same company match more weakly.
 - A site is its name (`sso.example.com`), not the full link: a sign-in page with a fresh one-time link on every sign-in (single sign-on, Keycloak) is the same site. PassKeeper also notices such a page by its changed address when the title stays the same.
 - A site is filled in by itself at most twice in 3 minutes: a page that comes back with a new link after a failed sign-in is not filled over and over.
-- The entry card shows where the entry is filled in by itself (**Filled in by itself on**); to undo, use the **…** menu → **Do not fill in automatically**.
+- The entry card shows where the entry is filled in by itself (**Filled in by itself on**); to undo, use the **…** menu → **Do not fill in automatically**. Removing the site's address from the entry undoes the choice for that site as well.
+- A VPN or program entry can be the chosen account of a site too (a domain account on a single sign-on page, for example): the site's address is added to it and kept when the entry is edited.
+- A form below the visible part of the page is found as well: PassKeeper scrolls to the field before typing.
+- A field without a label of its own is recognised by the text next to it ("Enter your phone number" above the field). A phone field where the site already put the country code ("+7") counts as empty; only an entry with a phone number is filled into it by itself.
 - While the vault is locked the suggestion offers to unlock it with the PIN.
 - Suggestions are turned off in **Settings → Autofill → Suggestions at login fields**.
+
+### A new site {#new-site}
+
+**Create an entry from the sign-in page.** On a site without entries, the login or password field of a sign-in form offers **Create an entry for …**. A new entry opens with the site's address and a suggested password; the fields of the form found (login, password, sign-in in two steps) make its typing sequence. After saving, PassKeeper goes back to the page and fills in the form.
+
+**Save a sign-in done by hand.** When you signed in to such a site yourself, without PassKeeper, it offers **Save…** once the next page of the site opens. Nothing is read from the page: the entry that opens has only the address, and you enter the login and password. If another entry already has the same login and password (a VPN domain account, for example), PassKeeper offers to use that entry for the site or to save a new entry with the same data. **Never for this site** stops the offer there; turned off in **Settings → Autofill → Offer to save sign-ins to websites**.
 
 ## Auto-type hotkey {#hotkey}
 
@@ -113,7 +129,7 @@ In a sign-in window (browser or program) press **Ctrl+Alt+A**:
 1. PassKeeper identifies the window: the page address, or the program by process name and title.
 2. With one matching entry it is typed at once; with several a list appears (Enter: type, ↑↓: select, Esc: cancel).
 3. Fields are filled one by one: a login the client remembered is not retyped; a password, PIN or code field gets just that value. If the cursor is not in the page's form, PassKeeper finds the form and puts the cursor into the login field.
-4. If the entry has a custom typing order, that is typed.
+4. If the entry has a typing order of keys, that is typed; an order of fields only fills those fields of the form.
 
 The hotkey is changed in **Settings → Autofill**. The keyboard button in an entry card minimizes PassKeeper and types into the entry's client window or the previous window.
 
@@ -127,15 +143,26 @@ No need to add windows by hand:
 
 ## Automatic sign-in {#autologin}
 
+### VPN clients and programs
+
 For entries with **Sign in automatically** on: when the client's sign-in window appears, PassKeeper fills the fields and presses Enter.
 
 - If the vault is locked, PassKeeper asks for the PIN right away and signs in after unlocking.
 - Each window is handled once. An entry is tried at most 2 times in 10 minutes, so a wrong password cannot lock the account; a notification tells when the limit is reached.
 - If a client has several entries, the one whose server address is in the window title is used; otherwise automatic sign-in is skipped and the suggestion is shown.
-- Main switch: **Settings → Autofill → Automatic sign-in to programs**.
+- Main switch: **Settings → Autofill → Automatic sign-in to VPN clients and programs**.
 - A sign-in window the client hid and shows again (after a connection error, for example) counts as new.
 
 **Without automatic sign-in.** When exactly one entry belongs to a sign-in window (by the client's windows), the fields are filled in by themselves as soon as the cursor is in an empty login or password field, without pressing Enter. A login box without a label in a known client's window (Check Point and others) is recognised as the login.
+
+### Websites {#autologin-web}
+
+For website entries with **Sign in automatically** on: when PassKeeper has filled in the sign-in form by itself (or you chose the entry in the list at the field), it presses Enter.
+
+- Attempts that typed a password are counted: at most 2 per entry in 10 minutes. After that the form is only filled in, Enter is not pressed, and a notification appears.
+- Sign-in in two steps (login, then password): Enter is pressed after the login as well; if the password is asked for on a new page, PassKeeper fills that page too.
+- Works together with **Fill in sign-in forms automatically**. Main switch: **Settings → Autofill → Automatic sign-in to websites**.
+- A VPN or program entry chosen on a site only fills in the form there: its switch is about the client.
 
 ## Token and smart-card PIN {#pin}
 
@@ -143,7 +170,7 @@ A PIN field ("PIN:", "Enter PIN", "Token PIN") is recognised separately from a p
 
 Rutoken and CryptoPro CSP PIN prompts are in the client catalog; they use the sequence `{PIN}{ENTER}` by default.
 
-## Program windows, other addresses and custom typing order {#autotype}
+## Program windows, other addresses and typing order {#autotype}
 
 Usually nothing here needs changing: a site needs only its address, a program only the chosen client.
 
@@ -166,11 +193,15 @@ id.example.com
 
 An address is added by itself when you choose the entry in the list at a field on another page of the domain, or tick **Remember the choice**.
 
-### Custom typing order
+### Typing order
 
-The folded **Custom typing order: for non-standard windows** block at the bottom of the editor. Empty: PassKeeper finds the fields and fills each of them (recommended). A sequence of your own is needed when fields are not recognised: terminals, custom-drawn windows, multi-step forms. PassKeeper types it where the cursor is, as if you typed it.
+The folded **Typing order** block at the bottom of the editor. The sequence is shown as elements (`{USERNAME}`, `{TAB}`, `{PASSWORD}`, `{ENTER}`), each with a cross that removes it. Elements from the list below are added at the end by clicking them, right-click copies; **Edit as text** opens the whole sequence.
 
-Text in braces is replaced by the entry's data or a key press; everything else is typed as is. In the editor, click a placeholder to insert it; right-click to copy.
+- **Made automatically.** With **Sign in automatically** on, PassKeeper makes the order itself: from the sign-in form's fields found when the entry was created (otherwise a login and a password), with Enter at the end; for sign-in in two steps with Enter after the login too. Without automatic sign-in Enter is not pressed.
+- **Fields only** (`{USERNAME}`, `{PASSWORD}`, `{PIN}`, `{TOTP}`, `{EMAIL}`, `{PHONE}`, `{KEY}` separated by `{TAB}` or `{ENTER}`). PassKeeper fills these fields of the form in order, as reliably as without a sequence, and presses Enter after the field it follows. For example `{PASSWORD}{ENTER}`: a login the program remembers is left alone. Removing an element of the automatic sequence with its cross makes it your own.
+- **Keystrokes** (with pauses, text and other keys), for terminals and custom-drawn windows: PassKeeper types them where the cursor is, as if you typed them.
+
+Text in braces is replaced by the entry's data or a key press; everything else is typed as is.
 
 | Placeholder | Typed |
 |---|---|
@@ -262,7 +293,7 @@ On every save the previous vault is kept as `vault.pkv.bak`, and once a day a co
 |---|---|
 | General | language, appearance (dark, light, as Windows), start with Windows, minimize to tray |
 | Security | auto-lock, clipboard clearing, lock with Windows, change master password and PIN |
-| Autofill | hotkey, suggestions at fields, automatic filling of sign-in forms, autofill log, automatic sign-in, Enter after filling, compatibility typing mode, delay between keystrokes |
+| Autofill | hotkey, suggestions at fields, automatic filling of sign-in forms, autofill log, automatic sign-in to VPN clients and programs, automatic sign-in to websites, offer to save sign-ins, Enter after filling, compatibility typing mode, delay between keystrokes |
 | Profile | sign out, delete the user |
 | Data | vault folder, backup |
 | About | version, installation mode, uninstall, the author's contacts for remarks and suggestions (Telegram, e-mail, GitHub) |
@@ -298,9 +329,11 @@ Uninstall.exe /S
 | Ctrl+C | copy password |
 | Ctrl+B | copy login |
 | Double-click an entry | copy password |
-| Delete | move to trash |
+| Ctrl+A | select all entries in the list |
+| Ctrl+click, Shift+click | add an entry to the selection, select a range |
+| Delete | move to trash (several selected entries after a confirmation) |
 | Ctrl+L | lock |
-| Esc or a click next to the dialog | close a dialog (settings, help, generator and others) |
+| Esc or a click next to the dialog | close a dialog (settings, help, generator and others); in the list, clear the selection |
 
 ## Troubleshooting {#faq}
 
@@ -314,7 +347,7 @@ Uninstall.exe /S
 
 **Several accounts of one VPN.** Set **Server address** in each entry: automatic sign-in and suggestions use the entry whose address is in the window title.
 
-**Automatic sign-in is paused.** There were 2 attempts in 10 minutes. Check the password in the entry; automatic sign-in is available again after 10 minutes, and Ctrl+Alt+A types the data meanwhile.
+**Automatic sign-in is paused.** There were 2 attempts in 10 minutes. Check the password in the entry; automatic sign-in is available again after 10 minutes, and Ctrl+Alt+A types the data meanwhile. On a website the form is filled in without Enter meanwhile.
 
 **A VPN client behaves differently while PassKeeper runs.** In the background PassKeeper only receives focus notifications and does not query program windows until you ask (suggestion, Ctrl+Alt+A, automatic sign-in). If the problem remains, turn off **Suggestions at login fields** and report the error text.
 
