@@ -120,6 +120,7 @@ public partial class App : Application
         _foreground.Changed += hwnd =>
         {
             if (_popup is { IsVisible: true } && !_popup.IsFor(hwnd)) _popup.HidePopup();
+            MemoryTrimmer.AfterActivity();
         };
         _pages = new BrowserPageWatcher(_foreground);
         _pages.PageChanged += () =>
@@ -399,6 +400,7 @@ public partial class App : Application
         Dispatcher.BeginInvoke(async () =>
         {
             if (!HasProfile || IsExiting) return;
+            MemoryTrimmer.AfterActivity();
             if (_autoLogin != null && await _autoLogin.TryWindowAsync(field.Window, field))
             {
                 _popup?.HidePopup();
@@ -479,6 +481,7 @@ public partial class App : Application
         Dispatcher.BeginInvoke(async () =>
         {
             if (!HasProfile || !Vault.IsUnlocked || IsExiting || AutoType.IsBusy) return;
+            MemoryTrimmer.AfterActivity();
             await OfferToSaveAsync(page, target);
             if (!Settings.AutoFillWeb) return;
             var matches = EntryMatcher.Match(Vault.ActiveEntries, target.ToContext())

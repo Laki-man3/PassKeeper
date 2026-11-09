@@ -25,7 +25,7 @@ Offline password manager for Windows. No network access, no cloud, no telemetry.
 | Runtime | self-contained .NET 10; installer and uninstaller run on the built-in .NET Framework 4.8 |
 | Network | none |
 | Package size | installer 67 MB, installed 161 MB |
-| Resource use | in the tray: ~15 MB working set, no CPU load while idle (no timers or animations while hidden) |
+| Resource use | in the tray: ~12 MB working set, ~70 MB commit charge, no CPU load while idle (no recurring timers or animations while hidden); software rendering |
 | Users | several local users, each with its own vault, PIN and backups; sign out / sign in by name and master password |
 | Vault encryption | AES-256-GCM, random 256-bit vault key |
 | Key derivation | Argon2id, 64 MiB, 3 iterations, 4 lanes, 256-bit salt |
@@ -35,13 +35,13 @@ Offline password manager for Windows. No network access, no cloud, no telemetry.
 | Clipboard | cleared after 30 s (10–60 s / never), excluded from clipboard history and cloud sync |
 | Backups | previous version + daily copies for 14 days (encrypted) |
 | Autofill | UI Automation / MSAA field detection (the form's fields read in one pass), SendInput typing; a sign-in page is found and filled when it opens, also without the cursor in the form, below the visible part of the page or in a frame: filling starts 0.3–0.9 s after the page loads (verified in Chrome 154, Firefox 156, Yandex Browser 26.8); desktop sign-in clients: VPN, VDI, RDP, token PIN prompts |
-| Automatic sign-in | VPN clients and programs: when the sign-in window appears; websites: Enter after the sign-in form is filled in; at most 2 attempts per entry in 10 minutes, separate switches for clients and websites |
+| Automatic sign-in | VPN clients and programs: when the sign-in window appears; websites: Enter after the sign-in form is filled in; at most 2 failed attempts per entry in 10 minutes (successful sign-ins do not count), separate switches for clients and websites |
 | Auto-type hotkey | Ctrl+Alt+A (configurable) |
 | Import | 25+ sources, see below |
 | Export | 13 formats |
 | UI languages | English, Russian |
 | Help | built-in user guide (works offline) |
-| Tests | 113 unit tests |
+| Tests | 116 unit tests |
 
 ### Features
 
@@ -51,7 +51,7 @@ Offline password manager for Windows. No network access, no cloud, no telemetry.
 - Several entries at once: a click on an entry's icon starts selecting, then clicks add or remove entries; "Select all" above the list (Ctrl+A); add to or remove from favorites, delete (to the trash, after a confirmation), restore or delete forever in the trash.
 - Folders ("Work", "Study", nested "Work/Mail"): created in the left pane, kept while empty, renamed or deleted (entries are kept); entries are dragged with the mouse into a folder, to favorites or to the trash.
 - Users: first run creates a local user (name + master password), then a mandatory PIN; later starts and inactivity locks ask for the PIN only. Sign out deletes the PIN; signing in again takes the name and master password and a new PIN. Deleting a user in Settings erases that user's vault, PIN and backups. Data of earlier versions becomes the first user.
-- Websites: when a sign-in page opens, its form is found (the cursor is put into the login field with a click if needed, only when nothing covers it) and filled with the entry saved for that address, even when other entries share the domain (a company's other services). Several candidates: a list next to the login field; the chosen entry becomes the account for that site and is filled in by itself next time, also among several accounts saved for one address. A site is its host name, so sign-in pages with a fresh one-time link every time are recognised; a page is also noticed by its changed address when the title stays the same. No entry: pick any entry and remember the site for it. Each page is filled once and a site at most twice in 3 minutes; fields the user has typed in are left alone. An optional autofill log (no logins, passwords or full addresses) shows why a form was or was not filled. With "Sign in automatically" in a site entry, Enter is pressed after the form is filled in (at most 2 attempts with a password in 10 minutes); the main switch is "Automatic sign-in to websites", separate from the one for clients.
+- Websites: when a sign-in page opens, its form is found (the cursor is put into the login field with a click if needed, only when nothing covers it) and filled with the entry saved for that address, even when other entries share the domain (a company's other services). Several candidates: a list next to the login field; the chosen entry becomes the account for that site and is filled in by itself next time, also among several accounts saved for one address. A site is its host name, so sign-in pages with a fresh one-time link every time are recognised; a page is also noticed by its changed address when the title stays the same. No entry: pick any entry and remember the site for it. Each page is filled once and a site at most twice in 3 minutes; fields the user has typed in are left alone. An optional autofill log (no logins, passwords or full addresses) shows why a form was or was not filled. With "Sign in automatically" in a site entry, Enter is pressed after the form is filled in (at most 2 failed attempts with a password in 10 minutes; successful sign-ins do not count); the main switch is "Automatic sign-in to websites", separate from the one for clients.
 - New sites: on a sign-in page of a site without entries, "Create an entry for …" opens an entry with the address and the form's fields and fills the form after saving. After a sign-in done by hand, PassKeeper offers to save it (nothing is read from the page; the login and password are entered in PassKeeper); an entry with the same login and password can be used for the site instead of a second copy.
 - Typing order as elements with a cross each; with automatic sign-in it is made from the sign-in form's fields. An order of fields only ("{PASSWORD}{ENTER}") fills those fields of the form; keystroke sequences are kept for terminals.
 - Entries work both ways: a site's login and password can be copied into an entry for a VPN client or program, and any VPN or program entry can be used on a website ("Use for a website…").
@@ -67,7 +67,7 @@ No manual window setup is needed:
 
 - **Detection.** Ctrl+Alt+A in the window of a client without an entry opens a new entry with the client, its windows and its form fields already recognised; the login and password can be taken from a site entry. After saving, PassKeeper signs in to that window.
 - **Client list.** "Choose…" in the editor finds running and installed clients (uninstall registry, running processes) and lists any other open window.
-- **Automatic sign-in.** For entries with "Sign in automatically", the fields are filled and Enter is pressed when the sign-in window appears; a locked vault asks for the PIN first. Each window is handled once, at most 2 attempts per entry in 10 minutes. Several accounts of one client are told apart by the server address in the window title.
+- **Automatic sign-in.** For entries with "Sign in automatically", the fields are filled and Enter is pressed when the sign-in window appears; a locked vault asks for the PIN first. Each window is handled once, at most 2 failed attempts per entry in 10 minutes; a sign-in counts as successful when the sign-in window is gone and does not come back. Several accounts of one client are told apart by the server address in the window title.
 - Fields are filled one by one: a remembered login is kept or replaced, a password, PIN or code field gets only its value; a text box without a label in a known client's window is taken as the login.
 - Token / smart-card PIN: the entry's "Token PIN" field (otherwise the password); `{PIN}` in sequences.
 - Clients running as administrator or SYSTEM: Windows blocks simulated input (UIPI); the password or PIN goes to the clipboard (cleared as configured) with a notification.
@@ -95,7 +95,7 @@ Chrome 127+ protects newly saved passwords with App-Bound Encryption, which thir
 ### Installation
 
 ```bat
-PassKeeper-Setup-1.5.1.exe
+PassKeeper-Setup-1.5.2.exe
 ```
 
 | Mode | Location | Rights |
@@ -109,7 +109,7 @@ The autostart and language chosen in the installer are used on the first run.
 Silent install: `/S`, `/allusers` or `/currentuser`, `/desktop`, `/autostart` or `/noautostart`, `/nolaunch`, `"/dir=path"`, `/lang=en|ru`. Exit codes: 0 ok, 1 error, 740 elevation required, 1602 cancelled.
 
 ```bat
-PassKeeper-Setup-1.5.1.exe /S /allusers /desktop /autostart
+PassKeeper-Setup-1.5.2.exe /S /allusers /desktop /autostart
 ```
 
 ### Uninstall
@@ -146,6 +146,10 @@ Output in `dist\<version>\`: installer, portable zip, `SHA256SUMS.txt`, `7z\` vo
 - Binaries are not code-signed.
 - The master password cannot be recovered.
 
+### License
+
+MIT, see [LICENSE](LICENSE).
+
 ---
 
 ## Русский
@@ -167,7 +171,7 @@ Output in `dist\<version>\`: installer, portable zip, `SHA256SUMS.txt`, `7z\` vo
 | Среда выполнения | встроенная .NET 10; установщик и деинсталлятор работают на штатном .NET Framework 4.8 |
 | Сеть | не используется |
 | Размер | установщик 67 МБ, после установки 161 МБ |
-| Потребление ресурсов | в трее: ~15 МБ рабочего набора, без нагрузки на процессор в простое (скрытое окно не держит таймеров и анимаций) |
+| Потребление ресурсов | в трее: ~12 МБ рабочего набора, ~70 МБ выделенной памяти, без нагрузки на процессор в простое (скрытое окно не держит постоянных таймеров и анимаций); программная отрисовка |
 | Пользователи | несколько локальных пользователей, у каждого своё хранилище, PIN и резервные копии; выход и вход по имени и мастер-паролю |
 | Шифрование хранилища | AES-256-GCM, случайный 256-битный ключ |
 | Формирование ключа | Argon2id, 64 МиБ, 3 прохода, 4 потока, соль 256 бит |
@@ -177,13 +181,13 @@ Output in `dist\<version>\`: installer, portable zip, `SHA256SUMS.txt`, `7z\` vo
 | Буфер обмена | очистка через 30 с (10–60 с / никогда), исключение из журнала и облачной синхронизации |
 | Резервные копии | предыдущая версия + ежедневные копии за 14 дней (зашифрованы) |
 | Автозаполнение | поиск полей через UI Automation / MSAA (поля формы читаются за один проход), ввод через SendInput; страница входа находится и заполняется при открытии, даже если курсор не в форме, форма ниже видимой части страницы или во фрейме: заполнение начинается через 0,3–0,9 с после загрузки страницы (проверено в Chrome 154, Firefox 156, Яндекс Браузере 26.8); клиенты входа: VPN, VDI, RDP, запросы PIN токенов |
-| Автовход | VPN‑клиенты и программы — при появлении окна входа; сайты — Enter после заполнения формы входа; не больше 2 попыток на запись за 10 минут, отдельные выключатели для клиентов и сайтов |
+| Автовход | VPN‑клиенты и программы — при появлении окна входа; сайты — Enter после заполнения формы входа; не больше 2 неудачных попыток на запись за 10 минут (успешные входы не считаются), отдельные выключатели для клиентов и сайтов |
 | Горячая клавиша автоввода | Ctrl+Alt+A (настраивается) |
 | Импорт | 25+ источников, см. ниже |
 | Экспорт | 13 форматов |
 | Языки интерфейса | русский, английский |
 | Справка | встроенное руководство (работает без сети) |
-| Тесты | 113 модульных тестов |
+| Тесты | 116 модульных тестов |
 
 ### Возможности
 
@@ -193,7 +197,7 @@ Output in `dist\<version>\`: installer, portable zip, `SHA256SUMS.txt`, `7z\` vo
 - Несколько записей сразу: щелчок по значку записи начинает выбор, дальше щелчки добавляют и убирают записи; «Выбрать все» над списком (Ctrl+A); добавить в избранное или убрать из него, удалить (в корзину, после подтверждения), в корзине — восстановить или удалить навсегда.
 - Папки («Работа», «Учёба», вложенные «Работа/Почта»): создаются в левой панели, сохраняются пустыми, переименовываются и удаляются (записи остаются); записи перетаскиваются мышью в папку, в избранное или в корзину.
 - Пользователи: при первом запуске создаётся локальный пользователь (имя + мастер-пароль), затем обязательный PIN; при следующих запусках и после автоблокировки запрашивается только PIN. Выход из пользователя удаляет PIN; при повторном входе нужны имя и мастер-пароль и новый PIN. Удаление пользователя в настройках стирает его хранилище, PIN и резервные копии. Данные прежних версий становятся первым пользователем.
-- Сайты: при открытии страницы входа PassKeeper находит форму (если нужно, ставит курсор в поле логина щелчком — только когда поле ничем не закрыто) и подставляет запись, сохранённую для этого адреса, даже если у домена есть другие записи (другие сервисы компании). Несколько кандидатов — список у поля логина; выбранная запись становится основной для сайта и в следующий раз подставится сама, даже если для одного адреса сохранено несколько учётных записей. Сайт определяется по имени, поэтому страницы входа с новой одноразовой ссылкой при каждом входе распознаются; открытие страницы замечается и по смене адреса, если заголовок не меняется. Записи нет — можно выбрать любую и запомнить для неё сайт. Каждая страница заполняется один раз, сайт — не больше двух раз за 3 минуты; поля, в которые пользователь уже что-то ввёл, не трогаются. Журнал автозаполнения (по желанию, без логинов, паролей и полных адресов) показывает, почему форма заполнена или нет. Если в записи сайта включено «Входить автоматически», после заполнения формы нажимается Enter (не больше 2 попыток с вводом пароля за 10 минут); общий выключатель «Автовход на сайтах» отделён от выключателя для клиентов.
+- Сайты: при открытии страницы входа PassKeeper находит форму (если нужно, ставит курсор в поле логина щелчком — только когда поле ничем не закрыто) и подставляет запись, сохранённую для этого адреса, даже если у домена есть другие записи (другие сервисы компании). Несколько кандидатов — список у поля логина; выбранная запись становится основной для сайта и в следующий раз подставится сама, даже если для одного адреса сохранено несколько учётных записей. Сайт определяется по имени, поэтому страницы входа с новой одноразовой ссылкой при каждом входе распознаются; открытие страницы замечается и по смене адреса, если заголовок не меняется. Записи нет — можно выбрать любую и запомнить для неё сайт. Каждая страница заполняется один раз, сайт — не больше двух раз за 3 минуты; поля, в которые пользователь уже что-то ввёл, не трогаются. Журнал автозаполнения (по желанию, без логинов, паролей и полных адресов) показывает, почему форма заполнена или нет. Если в записи сайта включено «Входить автоматически», после заполнения формы нажимается Enter (не больше 2 неудачных попыток с вводом пароля за 10 минут; успешные входы не считаются); общий выключатель «Автовход на сайтах» отделён от выключателя для клиентов.
 - Новые сайты: на странице входа сайта без записей «Создать запись для …» открывает запись с адресом и полями формы и после сохранения заполняет форму. После входа вручную PassKeeper предлагает сохранить его (со страницы ничего не считывается, логин и пароль вводятся в PassKeeper); запись с теми же логином и паролем можно использовать для сайта вместо второй копии.
 - Порядок ввода — элементы с крестиком у каждого; с автовходом он составляется по полям формы входа. Порядок только из полей («{PASSWORD}{ENTER}») заполняет эти поля формы; последовательности клавиш остаются для терминалов.
 - Записи работают в обе стороны: логин и пароль сайта копируются в запись VPN‑клиента или программы, а запись VPN или программы можно использовать на сайте («Использовать для сайта…»).
@@ -209,7 +213,7 @@ Output in `dist\<version>\`: installer, portable zip, `SHA256SUMS.txt`, `7z\` vo
 
 - **Автоопределение.** Ctrl+Alt+A в окне клиента, для которого нет записи, открывает новую запись с уже определёнными клиентом, окнами и полями формы; логин и пароль можно взять из записи сайта. После сохранения PassKeeper выполняет вход в это окно.
 - **Список клиентов.** Кнопка «Выбрать…» в редакторе находит запущенные и установленные клиенты (по реестру программ и процессам) и показывает любые другие открытые окна.
-- **Автовход.** Для записей с включённым «Входить автоматически» при появлении окна входа поля заполняются и нажимается Enter; при заблокированном хранилище сначала запрашивается PIN. Каждое окно обрабатывается один раз, не больше 2 попыток на запись за 10 минут. Несколько учётных записей одного клиента различаются по адресу сервера в заголовке окна.
+- **Автовход.** Для записей с включённым «Входить автоматически» при появлении окна входа поля заполняются и нажимается Enter; при заблокированном хранилище сначала запрашивается PIN. Каждое окно обрабатывается один раз, не больше 2 неудачных попыток на запись за 10 минут; вход считается успешным, когда окно входа исчезло и не появилось снова. Несколько учётных записей одного клиента различаются по адресу сервера в заголовке окна.
 - Поля заполняются по отдельности: запомненный логин сохраняется или заменяется, в поле пароля, PIN или кода вводится только это значение; текстовое поле без подписи в окне известного клиента считается логином.
 - PIN токена / смарт-карты: поле записи «PIN‑код токена» (если его нет — пароль); `{PIN}` в последовательностях.
 - Клиенты, запущенные от имени администратора или SYSTEM: Windows блокирует эмулированный ввод (UIPI); пароль или PIN передаётся через буфер обмена (с очисткой по настройке) и уведомлением.
@@ -237,7 +241,7 @@ Chrome 127+ шифрует новые пароли App-Bound Encryption, нед�
 ### Установка
 
 ```bat
-PassKeeper-Setup-1.5.1.exe
+PassKeeper-Setup-1.5.2.exe
 ```
 
 | Режим | Папка | Права |
@@ -251,7 +255,7 @@ PassKeeper-Setup-1.5.1.exe
 Тихая установка: `/S`, `/allusers` или `/currentuser`, `/desktop`, `/autostart` или `/noautostart`, `/nolaunch`, `"/dir=путь"`, `/lang=ru|en`. Коды возврата: 0 — успех, 1 — ошибка, 740 — нужны права администратора, 1602 — отменено.
 
 ```bat
-PassKeeper-Setup-1.5.1.exe /S /allusers /desktop /autostart
+PassKeeper-Setup-1.5.2.exe /S /allusers /desktop /autostart
 ```
 
 ### Удаление
@@ -287,3 +291,7 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1
 - Автозаполнение на сайтах работает с полями, которые браузер показывает через интерфейс специальных возможностей (обычные поля HTML); для остальных форм — горячая клавиша.
 - Исполняемые файлы не подписаны цифровой подписью.
 - Мастер-пароль не восстанавливается.
+
+### Лицензия
+
+MIT, см. [LICENSE](LICENSE).

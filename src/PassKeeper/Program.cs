@@ -40,6 +40,9 @@ public static class Program
     public static int Main(string[] args)
     {
         var options = StartupOptions.Parse(args);
+        // Drawn by the processor: the interface is simple, and a loaded video driver keeps about 85 MB committed for as
+        // long as the program runs, also when it only sits in the tray.
+        System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
         if (options.Uninstall) return StartUninstaller(options.Quiet);
         SingleInstance? instance = null;
         if (options.ScreenshotsDirectory == null)

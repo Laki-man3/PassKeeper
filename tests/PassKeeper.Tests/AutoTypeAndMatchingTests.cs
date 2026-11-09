@@ -57,6 +57,79 @@ public class AutoTypeAndMatchingTests
     }
 
     [Fact]
+    public void SignInAttempts_OnlyFailedOnesCount()
+    {
+        var entry = Guid.NewGuid();
+        var t = new DateTime(2026, 11, 9, 12, 0, 0, DateTimeKind.Utc);
+        var attempts = new SignInAttempts(2, TimeSpan.FromMinutes(10), TimeSpan.FromSeconds(8));
+
+        // Successful sign-ins, as many as there are, leave the limit alone.
+        for (var i = 0; i < 5; i++)
+        {
+            Assert.True(attempts.Allowed(entry, t));
+            attempts.Record(entry, t).MarkSucceeded(t.AddSeconds(4));
+            t = t.AddSeconds(20);
+        }
+        Assert.Equal(0, attempts.Count(entry, t));
+
+        // Two refused passwords stop the next attempt, until they are ten minutes old.
+        attempts.Record(entry, t);
+        attempts.Record(entry, t.AddMinutes(1));
+        Assert.False(attempts.Allowed(entry, t.AddMinutes(2)));
+        Assert.True(attempts.Allowed(entry, t.AddMinutes(11)));
+        Assert.True(attempts.Allowed(Guid.NewGuid(), t.AddMinutes(2)));
+    }
+
+    [Fact]
+    public void SignInAttempts_AFormAskingAgainEndsTheWatch()
+    {
+        var entry = Guid.NewGuid();
+        var t = new DateTime(2026, 11, 9, 12, 0, 0, DateTimeKind.Utc);
+        var attempts = new SignInAttempts(2, TimeSpan.FromMinutes(10), TimeSpan.FromSeconds(30));
+
+        // The client replaced its refused dialog with a new window: the watch on the old one must not confirm it later.
+        var first = attempts.Record(entry, t);
+        var second = attempts.Record(entry, t.AddSeconds(6));
+        Assert.True(first.Refused);
+        Assert.False(first.MarkSucceeded(t.AddSeconds(17)));
+        Assert.Equal(2, attempts.Count(entry, t.AddSeconds(18)));
+
+        // The form again once the limit is reached: the last attempt stays refused as well.
+        attempts.AskedAgain(entry, t.AddSeconds(8));
+        Assert.False(second.MarkSucceeded(t.AddSeconds(23)));
+        Assert.False(attempts.Allowed(entry, t.AddMinutes(5)));
+
+        // A success confirmed long ago is left alone.
+        var other = Guid.NewGuid();
+        var done = attempts.Record(other, t);
+        Assert.True(done.MarkSucceeded(t.AddSeconds(15)));
+        attempts.AskedAgain(other, t.AddMinutes(2));
+        Assert.False(done.Refused);
+        Assert.Equal(0, attempts.Count(other, t.AddMinutes(2)));
+    }
+
+    [Fact]
+    public void SignInAttempts_AFormAskingAgainAtOnceWasNotASuccess()
+    {
+        var entry = Guid.NewGuid();
+        var t = new DateTime(2026, 11, 9, 12, 0, 0, DateTimeKind.Utc);
+        var attempts = new SignInAttempts(2, TimeSpan.FromMinutes(10), TimeSpan.FromSeconds(8));
+
+        // A slow refusal looked like a success: the form asking again a few seconds later shows it was not.
+        attempts.Record(entry, t).MarkSucceeded(t.AddSeconds(4));
+        Assert.Equal(1, attempts.Count(entry, t.AddSeconds(6)));
+        attempts.Record(entry, t.AddSeconds(8));
+        Assert.False(attempts.Allowed(entry, t.AddSeconds(9)));
+
+        // Signing in again some time after a real success does not count it.
+        var other = Guid.NewGuid();
+        attempts.Record(other, t).MarkSucceeded(t.AddSeconds(4));
+        Assert.Equal(0, attempts.Count(other, t.AddSeconds(20)));
+        attempts.Record(other, t.AddSeconds(20));
+        Assert.Equal(1, attempts.Count(other, t.AddSeconds(20)));
+    }
+
+    [Fact]
     public void SameAccount_LoginWithOrWithoutTheDomain()
     {
         var vpn = new VaultEntry { Title = "VPN", Username = @"CORP\jdoe", Password = "S3cret!" };

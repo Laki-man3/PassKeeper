@@ -256,7 +256,7 @@ public sealed class AutoTypeService
     }
 
     private readonly Dictionary<string, List<DateTime>> _siteFills = [];
-    private readonly Dictionary<Guid, List<DateTime>> _siteSignIns = [];
+    private readonly SignInAttempts _siteSignIns = new(AutoLoginService.MaxAttempts, AutoLoginService.AttemptWindow, TimeSpan.FromSeconds(8));
     private readonly HashSet<Guid> _siteSignInPaused = [];
 
     /// <summary>
@@ -276,20 +276,49 @@ public sealed class AutoTypeService
             return;
         }
         AutoFillLog.Write(passwordTyped ? "  signed in: Enter pressed after the password" : "  Enter pressed after the login (the password comes next)");
-        if (!passwordTyped) return;
-        if (!_siteSignIns.TryGetValue(entry.Id, out var times)) _siteSignIns[entry.Id] = times = [];
-        times.Add(DateTime.UtcNow);
+        if (!passwordTyped || target == null) return;
+        _ = WatchSiteSignInAsync(_siteSignIns.Record(entry.Id, DateTime.UtcNow), field.Window, target);
+    }
+
+    /// <summary>
+    /// After a password was sent on a site: the form going away and staying away for a few seconds means it was
+    /// accepted, so neither this attempt nor the fills of the site count any more (the next sign-in, after signing out
+    /// for example, is not held back). A form that stays or comes back is a refused password and keeps counting.
+    /// </summary>
+    private async Task WatchSiteSignInAsync(SignInAttempt attempt, IntPtr window, TargetWindow target)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
+        DateTime? goneSince = null;
+        while (DateTime.UtcNow < deadline && Native.IsWindow(window) && !attempt.Refused)
+        {
+            await Task.Delay(500);
+            bool? shown = Native.GetForegroundWindow() == window ? await Task.Run(() => FieldFinder.ShowsPasswordField(window)) : null;
+            if (shown != false)
+            {
+                goneSince = null;
+                continue;
+            }
+            goneSince ??= DateTime.UtcNow;
+            if (DateTime.UtcNow - goneSince < TimeSpan.FromSeconds(3)) continue;
+            if (!attempt.MarkSucceeded(DateTime.UtcNow)) return;
+            ForgetSiteFills(target);
+            AutoFillLog.Write($"signed in on {AutoFillLog.Describe(target)}: the form is gone, the attempt does not count");
+            return;
+        }
+    }
+
+    /// <summary>A successful sign-in: the limits on filling the site start over.</summary>
+    private void ForgetSiteFills(TargetWindow target)
+    {
+        if (DomainUtil.GetHost(target.Url) is not { } host) return;
+        _siteFills.Remove(host);
+        foreach (var page in _autoFilled.Keys.Where(k => DomainUtil.GetHost(k[(k.IndexOf('|') + 1)..]) == host).ToList()) _autoFilled.Remove(page);
     }
 
     private bool SignsInOnSite(VaultEntry entry, TargetWindow? target)
     {
         if (target is not { IsBrowser: true } || !entry.SignsInToSite || !_app.Settings.AutoLoginWeb) return false;
-        var count = 0;
-        if (_siteSignIns.TryGetValue(entry.Id, out var times))
-        {
-            times.RemoveAll(t => DateTime.UtcNow - t >= AutoLoginService.AttemptWindow);
-            count = times.Count;
-        }
+        var count = _siteSignIns.Count(entry.Id, DateTime.UtcNow);
         if (count < AutoLoginService.MaxAttempts)
         {
             _siteSignInPaused.Remove(entry.Id);
@@ -710,6 +739,7 @@ public sealed class AutoTypeService
         finally
         {
             Interlocked.Decrement(ref _typing);
+            MemoryTrimmer.AfterActivity();
         }
         return new FillResult(passwordTyped, entered);
     }
@@ -841,6 +871,33 @@ internal static class FieldFinder
         for (var i = index - 1; i >= 0 && i >= index - 3; i--)
             if (form.Fields[i].Usable && !form.Fields[i].IsPassword) return form.Fields[i];
         return null;
+    }
+
+    /// <summary>The page in the window shows a password field; null when the page could not be read.</summary>
+    public static bool? ShowsPasswordField(IntPtr window)
+    {
+        try
+        {
+            var page = PageIn(window);
+            return page == null ? null : ReadForm(page).Fields.Any(f => f.Usable && f.IsPassword);
+        }
+        catch (Exception ex) when (ex is ElementNotAvailableException or TimeoutException or InvalidOperationException or System.Runtime.InteropServices.COMException or ArgumentException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The page shown in a browser window, also when nothing lies in the middle of the window to find it by (a short
+    /// page after signing in): through the cursor, then the middle of the window, then the window's elements.
+    /// </summary>
+    private static AutomationElement? PageIn(IntPtr window)
+    {
+        Native.GetWindowThreadProcessId(window, out var pid);
+        var focused = AutomationElement.FocusedElement;
+        if (focused != null && focused.Current.ProcessId == pid && Container(focused) is { } container && container.Current.ControlType == ControlType.Document)
+            return container;
+        return PageOf(window) ?? AutomationElement.FromHandle(window).FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Document));
     }
 
     private static readonly CacheRequest LabelProperties = CreateLabelRequest();

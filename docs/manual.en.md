@@ -149,7 +149,8 @@ No need to add windows by hand:
 For entries with **Sign in automatically** on: when the client's sign-in window appears, PassKeeper fills the fields and presses Enter.
 
 - If the vault is locked, PassKeeper asks for the PIN right away and signs in after unlocking.
-- Each window is handled once. An entry is tried at most 2 times in 10 minutes, so a wrong password cannot lock the account; a notification tells when the limit is reached.
+- Each window is handled once. Only failed attempts count: at most 2 per entry in 10 minutes, so a wrong password cannot lock the account; a notification tells when the limit is reached.
+- A sign-in counts as successful when the sign-in window is gone and does not come back. PassKeeper cannot see the server's answer, so a window closed by hand after a refusal also counts as a successful sign-in.
 - If a client has several entries, the one whose server address is in the window title is used; otherwise automatic sign-in is skipped and the suggestion is shown.
 - Main switch: **Settings → Autofill → Automatic sign-in to VPN clients and programs**.
 - A sign-in window the client hid and shows again (after a connection error, for example) counts as new.
@@ -160,7 +161,7 @@ For entries with **Sign in automatically** on: when the client's sign-in window 
 
 For website entries with **Sign in automatically** on: when PassKeeper has filled in the sign-in form by itself (or you chose the entry in the list at the field), it presses Enter.
 
-- Attempts that typed a password are counted: at most 2 per entry in 10 minutes. After that the form is only filled in, Enter is not pressed, and a notification appears.
+- Only failed attempts that typed a password count: at most 2 per entry in 10 minutes. A successful sign-in (the form is gone) uses up nothing, and the limit on filling the site starts over. After the limit the form is only filled in, Enter is not pressed, and a notification appears.
 - Sign-in in two steps (login, then password): Enter is pressed after the login as well; if the password is asked for on a new page, PassKeeper fills that page too.
 - Works together with **Fill in sign-in forms automatically**. Main switch: **Settings → Autofill → Automatic sign-in to websites**.
 - A VPN or program entry chosen on a site only fills in the form there: its switch is about the client.
@@ -350,7 +351,7 @@ Uninstall.exe /S
 
 **Several accounts of one VPN.** Set **Server address** in each entry: automatic sign-in and suggestions use the entry whose address is in the window title.
 
-**Automatic sign-in is paused.** There were 2 attempts in 10 minutes. Check the password in the entry; automatic sign-in is available again after 10 minutes, and Ctrl+Alt+A types the data meanwhile. On a website the form is filled in without Enter meanwhile.
+**Automatic sign-in is paused.** 2 attempts failed in 10 minutes. Check the password in the entry; automatic sign-in is available again after 10 minutes, and Ctrl+Alt+A types the data meanwhile. On a website the form is filled in without Enter meanwhile.
 
 **A VPN client behaves differently while PassKeeper runs.** In the background PassKeeper only receives focus notifications and does not query program windows until you ask (suggestion, Ctrl+Alt+A, automatic sign-in). If the problem remains, turn off **Suggestions at login fields** and report the error text.
 

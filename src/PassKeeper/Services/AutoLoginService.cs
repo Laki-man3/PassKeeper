@@ -23,7 +23,7 @@ public sealed class AutoLoginService
     private readonly Dictionary<IntPtr, DateTime> _done = [];
     private readonly Dictionary<IntPtr, DateTime> _checked = [];
     private readonly HashSet<IntPtr> _unlockAsked = [];
-    private readonly Dictionary<Guid, List<DateTime>> _attempts = [];
+    private readonly SignInAttempts _attempts = new(MaxAttempts, AttemptWindow, TimeSpan.FromSeconds(30));
     private bool _enabled;
     private IntPtr _busyWindow;
     private int _autoEntries;
@@ -79,12 +79,6 @@ public sealed class AutoLoginService
             }
             var entry = Pick(target);
             if (entry == null) return false;
-            if (!AllowAttempt(entry))
-            {
-                _done[hwnd] = DateTime.UtcNow;
-                _app.Tray?.ShowBalloon("PassKeeper", Loc.F("AutoLogin.Paused", entry.Title, MaxAttempts));
-                return false;
-            }
             var form = field ?? await WaitForFormAsync(hwnd);
             if (form == null)
             {
@@ -93,10 +87,16 @@ public sealed class AutoLoginService
             }
             if (_app.AutoType.IsTyping || _done.ContainsKey(hwnd)) return true;
             _done[hwnd] = DateTime.UtcNow;
-            RecordAttempt(entry);
+            if (!_attempts.Allowed(entry.Id, DateTime.UtcNow))
+            {
+                _attempts.AskedAgain(entry.Id, DateTime.UtcNow);
+                _app.Tray?.ShowBalloon("PassKeeper", Loc.F("AutoLogin.Paused", entry.Title, MaxAttempts));
+                return false;
+            }
             Native.ForceForeground(hwnd);
             await Task.Run(() => FieldFinder.Focus(form.Element));
-            await _app.AutoType.FillFieldAsync(entry, form, submitAfter: true);
+            var result = await _app.AutoType.FillFieldAsync(entry, form, submitAfter: true);
+            if (result.Entered) _ = WatchSignInAsync(_attempts.Record(entry.Id, DateTime.UtcNow), hwnd, entry.Title);
             return true;
         }
         finally
@@ -130,14 +130,29 @@ public sealed class AutoLoginService
         return null;
     }
 
-    private bool AllowAttempt(VaultEntry entry) =>
-        !_attempts.TryGetValue(entry.Id, out var times) || times.Count(t => DateTime.UtcNow - t < AttemptWindow) < MaxAttempts;
-
-    private void RecordAttempt(VaultEntry entry)
+    /// <summary>
+    /// After the client was sent its password: the sign-in window gone (or its form), and staying so for a while, means
+    /// the sign-in went through and the attempt does not count. A client takes longer than a site to refuse, and may
+    /// hide the window meanwhile: if it asks again soon after, the attempt counts after all (see SignInAttempts).
+    /// </summary>
+    private static async Task WatchSignInAsync(SignInAttempt attempt, IntPtr hwnd, string title)
     {
-        if (!_attempts.TryGetValue(entry.Id, out var times)) _attempts[entry.Id] = times = [];
-        times.RemoveAll(t => DateTime.UtcNow - t >= AttemptWindow);
-        times.Add(DateTime.UtcNow);
+        var deadline = DateTime.UtcNow + TimeSpan.FromMinutes(1);
+        DateTime? goneSince = null;
+        while (DateTime.UtcNow < deadline && !attempt.Refused)
+        {
+            await Task.Delay(1000);
+            var gone = !Native.IsWindow(hwnd) || !Native.IsWindowVisible(hwnd) || await Task.Run(() => FieldFinder.FirstSignInField(hwnd)) == null;
+            if (!gone)
+            {
+                goneSince = null;
+                continue;
+            }
+            goneSince ??= DateTime.UtcNow;
+            if (DateTime.UtcNow - goneSince < TimeSpan.FromSeconds(15)) continue;
+            if (attempt.MarkSucceeded(DateTime.UtcNow)) AutoFillLog.Write($"signed in to \"{title}\": the sign-in window is gone, the attempt does not count");
+            return;
+        }
     }
 
     private void Expire()
