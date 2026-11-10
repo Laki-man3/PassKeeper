@@ -126,6 +126,7 @@ public partial class App : Application
         _pages.PageChanged += () =>
         {
             if (Settings.SmartSuggestions && Settings.AutoFillWeb) _watcher?.ProbePage();
+            AutoType.LookAfterSignIn(Native.GetForegroundWindow());
         };
         _autoLogin = new AutoLoginService(this, _foreground);
         if (Settings.AutoLogin) _autoLogin.Start();
@@ -148,6 +149,13 @@ public partial class App : Application
         };
         if (!(_options.Minimized && HasProfile)) ShowMainWindow();
         else MemoryTrimmer.TrimSoon();
+        // A sign-in window or page already in front (PassKeeper started with Windows while the VPN client asks for
+        // its password) sends no event: it is handled as if the user had just switched to it.
+        Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(async () =>
+        {
+            await Task.Delay(1000);
+            if (!IsExiting) _foreground.ReportCurrent();
+        }));
         if (!hotkeyOk)
             Tray.ShowBalloon("PassKeeper", Loc.F("Tray.HotkeyFailed", Settings.AutoTypeHotkey));
     }
@@ -418,6 +426,7 @@ public partial class App : Application
                 if (field.Kind is FieldKind.Password or FieldKind.Otp or FieldKind.Pin) _popup.ShowLocked(field, target);
                 return;
             }
+            if (target.IsBrowser && field.Kind == FieldKind.Password) AutoType.PageAfterSignIn(field.Window, target.Url, true);
             var all = EntryMatcher.Match(Vault.ActiveEntries, target.ToContext());
             var matches = all.Where(m => AutoTypeService.CanFill(m.Entry, field.Kind)).ToList();
             AutoFillLog.Write($"field {field.Kind} in {AutoFillLog.Describe(target)}: {AutoFillLog.Describe(matches)}");
@@ -482,6 +491,7 @@ public partial class App : Application
         {
             if (!HasProfile || !Vault.IsUnlocked || IsExiting || AutoType.IsBusy) return;
             MemoryTrimmer.AfterActivity();
+            AutoType.PageAfterSignIn(page.Window, target.Url, null);
             await OfferToSaveAsync(page, target);
             if (!Settings.AutoFillWeb) return;
             var matches = EntryMatcher.Match(Vault.ActiveEntries, target.ToContext())
@@ -511,11 +521,13 @@ public partial class App : Application
             {
                 _pageScans[key] = (DateTime.UtcNow, true);
                 AutoFillLog.Write("  no sign-in form found on the page");
+                AutoType.PageAfterSignIn(page.Window, target.Url, false);
                 return;
             }
             if (_watcher?.IsCurrent(page.Sequence) != true) return;
             _pageScans[key] = (DateTime.UtcNow, true);
             AutoFillLog.Write($"  sign-in form found ({field.Kind}, {Environment.TickCount64 - started} ms)");
+            AutoType.PageAfterSignIn(page.Window, target.Url, true);
             _popup ??= CreatePopup();
             if (EntryMatcher.Obvious(matches, site: true) is { } entry &&
                 await AutoType.TryAutoFillAsync(entry, field, target, putCursor: true))

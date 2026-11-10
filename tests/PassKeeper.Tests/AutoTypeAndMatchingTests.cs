@@ -81,6 +81,30 @@ public class AutoTypeAndMatchingTests
     }
 
     [Fact]
+    public void SiteSignInCheck_TheNextPageTells()
+    {
+        const string login = "https://sso.example.org/login-actions/authenticate?session_code=a1";
+        Func<double, TimeSpan> s = TimeSpan.FromSeconds;
+
+        // Another page of the site without a sign-in form, or the application the sign-in leads to: accepted.
+        Assert.Equal(SignInOutcome.Accepted, SiteSignInCheck.Judge(login, s(2), "https://sso.example.org/account", false));
+        Assert.Equal(SignInOutcome.Accepted, SiteSignInCheck.Judge("https://bank.example.org/login", s(2), "https://bank.example.org/login", false));
+        Assert.Equal(SignInOutcome.Accepted, SiteSignInCheck.Judge(login, s(3), "https://portal.example.org/home", null));
+
+        // The sign-in form again (a new one-time link included): refused.
+        Assert.Equal(SignInOutcome.Refused, SiteSignInCheck.Judge(login, s(3), "https://sso.example.org/login-actions/authenticate?session_code=b2", true));
+
+        // Nothing to tell from: the page the password was typed on, reported late (whatever address the browser shows
+        // then), a page not looked at, a page too late.
+        Assert.Equal(SignInOutcome.Unknown, SiteSignInCheck.Judge(login, s(0.2), login, true));
+        Assert.Equal(SignInOutcome.Unknown, SiteSignInCheck.Judge(login, s(3), login, true));
+        Assert.Equal(SignInOutcome.Unknown, SiteSignInCheck.Judge("https://sso.example.org/auth", s(0.2), login, true));
+        Assert.Equal(SignInOutcome.Unknown, SiteSignInCheck.Judge(login, s(2), "https://sso.example.org/account", null));
+        Assert.Equal(SignInOutcome.Unknown, SiteSignInCheck.Judge(login, s(40), "https://portal.example.org/home", null));
+        Assert.Equal(SignInOutcome.Unknown, SiteSignInCheck.Judge(login, s(90), "https://sso.example.org/account", false));
+    }
+
+    [Fact]
     public void SignInAttempts_AFormAskingAgainEndsTheWatch()
     {
         var entry = Guid.NewGuid();

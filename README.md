@@ -25,7 +25,7 @@ Offline password manager for Windows. No network access, no cloud, no telemetry.
 | Runtime | self-contained .NET 10; installer and uninstaller run on the built-in .NET Framework 4.8 |
 | Network | none |
 | Package size | installer 67 MB, installed 161 MB |
-| Resource use | in the tray: ~12 MB working set, ~70 MB commit charge, no CPU load while idle (no recurring timers or animations while hidden); software rendering |
+| Resource use | in the tray: ~12 MB working set, given back 30 s after autofill; no CPU load while idle (no recurring timers or animations while hidden) |
 | Users | several local users, each with its own vault, PIN and backups; sign out / sign in by name and master password |
 | Vault encryption | AES-256-GCM, random 256-bit vault key |
 | Key derivation | Argon2id, 64 MiB, 3 iterations, 4 lanes, 256-bit salt |
@@ -41,7 +41,7 @@ Offline password manager for Windows. No network access, no cloud, no telemetry.
 | Export | 13 formats |
 | UI languages | English, Russian |
 | Help | built-in user guide (works offline) |
-| Tests | 116 unit tests |
+| Tests | 117 unit tests |
 
 ### Features
 
@@ -95,7 +95,7 @@ Chrome 127+ protects newly saved passwords with App-Bound Encryption, which thir
 ### Installation
 
 ```bat
-PassKeeper-Setup-1.5.2.exe
+PassKeeper-Setup-1.5.3.exe
 ```
 
 | Mode | Location | Rights |
@@ -109,7 +109,7 @@ The autostart and language chosen in the installer are used on the first run.
 Silent install: `/S`, `/allusers` or `/currentuser`, `/desktop`, `/autostart` or `/noautostart`, `/nolaunch`, `"/dir=path"`, `/lang=en|ru`. Exit codes: 0 ok, 1 error, 740 elevation required, 1602 cancelled.
 
 ```bat
-PassKeeper-Setup-1.5.2.exe /S /allusers /desktop /autostart
+PassKeeper-Setup-1.5.3.exe /S /allusers /desktop /autostart
 ```
 
 ### Uninstall
@@ -171,7 +171,7 @@ MIT, see [LICENSE](LICENSE).
 | Среда выполнения | встроенная .NET 10; установщик и деинсталлятор работают на штатном .NET Framework 4.8 |
 | Сеть | не используется |
 | Размер | установщик 67 МБ, после установки 161 МБ |
-| Потребление ресурсов | в трее: ~12 МБ рабочего набора, ~70 МБ выделенной памяти, без нагрузки на процессор в простое (скрытое окно не держит постоянных таймеров и анимаций); программная отрисовка |
+| Потребление ресурсов | в трее: ~12 МБ рабочего набора, после автозаполнения память возвращается через 30 с; без нагрузки на процессор в простое (скрытое окно не держит постоянных таймеров и анимаций) |
 | Пользователи | несколько локальных пользователей, у каждого своё хранилище, PIN и резервные копии; выход и вход по имени и мастер-паролю |
 | Шифрование хранилища | AES-256-GCM, случайный 256-битный ключ |
 | Формирование ключа | Argon2id, 64 МиБ, 3 прохода, 4 потока, соль 256 бит |
@@ -187,7 +187,7 @@ MIT, see [LICENSE](LICENSE).
 | Экспорт | 13 форматов |
 | Языки интерфейса | русский, английский |
 | Справка | встроенное руководство (работает без сети) |
-| Тесты | 116 модульных тестов |
+| Тесты | 117 модульных тестов |
 
 ### Возможности
 
@@ -241,7 +241,7 @@ Chrome 127+ шифрует новые пароли App-Bound Encryption, нед�
 ### Установка
 
 ```bat
-PassKeeper-Setup-1.5.2.exe
+PassKeeper-Setup-1.5.3.exe
 ```
 
 | Режим | Папка | Права |
@@ -255,7 +255,7 @@ PassKeeper-Setup-1.5.2.exe
 Тихая установка: `/S`, `/allusers` или `/currentuser`, `/desktop`, `/autostart` или `/noautostart`, `/nolaunch`, `"/dir=путь"`, `/lang=ru|en`. Коды возврата: 0 — успех, 1 — ошибка, 740 — нужны права администратора, 1602 — отменено.
 
 ```bat
-PassKeeper-Setup-1.5.2.exe /S /allusers /desktop /autostart
+PassKeeper-Setup-1.5.3.exe /S /allusers /desktop /autostart
 ```
 
 ### Удаление

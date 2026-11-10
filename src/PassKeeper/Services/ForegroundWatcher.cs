@@ -39,6 +39,20 @@ public sealed class ForegroundWatcher : IDisposable
         _hook = SetWinEventHook(EventSystemForeground, EventSystemForeground, IntPtr.Zero, _callback, 0, 0, WinEventOutOfContext | WinEventSkipOwnProcess);
     }
 
+    /// <summary>
+    /// Reports the window in front now, as if the user had just switched to it: a sign-in window or page already open
+    /// when PassKeeper starts sends no event of its own. PassKeeper's own windows are left out, as by the hook.
+    /// </summary>
+    public void ReportCurrent()
+    {
+        var hwnd = Native.GetForegroundWindow();
+        if (hwnd == IntPtr.Zero) return;
+        Native.GetWindowThreadProcessId(hwnd, out var pid);
+        if (pid == (uint)Environment.ProcessId) return;
+        var root = Native.GetAncestor(hwnd, GaRoot);
+        Changed?.Invoke(root != IntPtr.Zero ? root : hwnd);
+    }
+
     public void Dispose()
     {
         if (_hook == IntPtr.Zero) return;

@@ -276,34 +276,100 @@ public sealed class AutoTypeService
             return;
         }
         AutoFillLog.Write(passwordTyped ? "  signed in: Enter pressed after the password" : "  Enter pressed after the login (the password comes next)");
-        if (!passwordTyped || target == null) return;
-        _ = WatchSiteSignInAsync(_siteSignIns.Record(entry.Id, DateTime.UtcNow), field.Window, target);
+        if (!passwordTyped) return;
+        var attempt = _siteSignIns.Record(entry.Id, DateTime.UtcNow);
+        foreach (var old in _sentSignIns.Where(p => DateTime.UtcNow - p.Value.At > SiteSignInCheck.Wait).Select(p => p.Key).ToList()) _sentSignIns.Remove(old);
+        if (target?.Url is not { } url) return;
+        _sentSignIns[field.Window] = new SentSignIn(entry.Id, attempt, url, target, DateTime.UtcNow);
+        // The browser may have shown the next page already, before the sign-in was noted here.
+        LookAfterSignIn(field.Window);
+    }
+
+    private sealed record SentSignIn(Guid Entry, SignInAttempt Attempt, string Url, TargetWindow Target, DateTime At);
+
+    /// <summary>Sign-ins sent on sites, by browser window, until the next page tells how they went.</summary>
+    private readonly Dictionary<IntPtr, SentSignIn> _sentSignIns = [];
+
+    private readonly HashSet<IntPtr> _lookingAfterSignIn = [];
+
+    /// <summary>Pauses before the looks at the page after a sign-in (the first one lets the browser show the answer).</summary>
+    private static readonly TimeSpan[] LookPauses = [SiteSignInCheck.Settle, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(3)];
+
+    /// <summary>
+    /// After a sign-in, and when the browser window then shows another page (its title or address changed): some
+    /// browsers (Yandex) report no page when the cursor is in none of its fields, or put their own "save password"
+    /// window in front. The page is looked at a few times at most, until it tells how the sign-in went.
+    /// </summary>
+    public async void LookAfterSignIn(IntPtr window)
+    {
+        if (!_sentSignIns.ContainsKey(window) || !_lookingAfterSignIn.Add(window)) return;
+        try
+        {
+            Native.GetWindowThreadProcessId(window, out var browser);
+            foreach (var pause in LookPauses)
+            {
+                await Task.Delay(pause);
+                if (!_sentSignIns.ContainsKey(window)) return;
+                Native.GetWindowThreadProcessId(Native.GetForegroundWindow(), out var front);
+                if (front != browser) continue;
+                await LookAtPageAfterSignInAsync(window);
+            }
+        }
+        finally
+        {
+            _lookingAfterSignIn.Remove(window);
+        }
+    }
+
+    /// <summary>One look at the page in the window: its address and whether it has a sign-in form.</summary>
+    private async Task LookAtPageAfterSignInAsync(IntPtr window)
+    {
+        var (url, form) = await Task.Run(() =>
+        {
+            try
+            {
+                var page = FieldFinder.PageOf(window);
+                if (page == null) return (null, null);
+                var target = TargetDetector.Capture(window, detectUrl: true, focused: page);
+                return (target.Url, (bool?)(FieldFinder.FindSignInField(page, window) != null));
+            }
+            catch (Exception ex) when (ex is ElementNotAvailableException or TimeoutException or InvalidOperationException or System.Runtime.InteropServices.COMException or ArgumentException)
+            {
+                return ((string?)null, (bool?)null);
+            }
+        });
+        AutoFillLog.Write($"page after signing in on {DomainUtil.GetHost(url) ?? "(not read)"}: sign-in form {(form == null ? "not looked for" : form.Value ? "found" : "not found")}");
+        PageAfterSignIn(window, url, form);
     }
 
     /// <summary>
-    /// After a password was sent on a site: the form going away and staying away for a few seconds means it was
-    /// accepted, so neither this attempt nor the fills of the site count any more (the next sign-in, after signing out
-    /// for example, is not held back). A form that stays or comes back is a refused password and keeps counting.
+    /// A page shown in a browser window (<paramref name="signInForm"/>: whether it has a sign-in form, null when not
+    /// looked at). After a password sent there, it tells whether it was accepted: then neither the attempt nor the
+    /// fills of the site count any more (the next sign-in, after signing out for example, is not held back). The pages
+    /// are looked at anyway, for autofill: nothing more is read from the browser for this.
     /// </summary>
-    private async Task WatchSiteSignInAsync(SignInAttempt attempt, IntPtr window, TargetWindow target)
+    public void PageAfterSignIn(IntPtr window, string? url, bool? signInForm)
     {
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
-        DateTime? goneSince = null;
-        while (DateTime.UtcNow < deadline && Native.IsWindow(window) && !attempt.Refused)
+        if (!_sentSignIns.TryGetValue(window, out var sent)) return;
+        var now = DateTime.UtcNow;
+        if (now - sent.At > SiteSignInCheck.Wait)
         {
-            await Task.Delay(500);
-            bool? shown = Native.GetForegroundWindow() == window ? await Task.Run(() => FieldFinder.ShowsPasswordField(window)) : null;
-            if (shown != false)
-            {
-                goneSince = null;
-                continue;
-            }
-            goneSince ??= DateTime.UtcNow;
-            if (DateTime.UtcNow - goneSince < TimeSpan.FromSeconds(3)) continue;
-            if (!attempt.MarkSucceeded(DateTime.UtcNow)) return;
-            ForgetSiteFills(target);
-            AutoFillLog.Write($"signed in on {AutoFillLog.Describe(target)}: the form is gone, the attempt does not count");
+            _sentSignIns.Remove(window);
             return;
+        }
+        switch (SiteSignInCheck.Judge(sent.Url, now - sent.At, url, signInForm))
+        {
+            case SignInOutcome.Refused:
+                _sentSignIns.Remove(window);
+                _siteSignIns.AskedAgain(sent.Entry, now);
+                AutoFillLog.Write($"  the sign-in form is shown again on {AutoFillLog.Describe(sent.Target)}: the attempt counts");
+                break;
+            case SignInOutcome.Accepted:
+                _sentSignIns.Remove(window);
+                if (!sent.Attempt.MarkSucceeded(now)) return;
+                ForgetSiteFills(sent.Target);
+                AutoFillLog.Write($"signed in on {AutoFillLog.Describe(sent.Target)}: the next page has no sign-in form, the attempt does not count");
+                break;
         }
     }
 
@@ -871,33 +937,6 @@ internal static class FieldFinder
         for (var i = index - 1; i >= 0 && i >= index - 3; i--)
             if (form.Fields[i].Usable && !form.Fields[i].IsPassword) return form.Fields[i];
         return null;
-    }
-
-    /// <summary>The page in the window shows a password field; null when the page could not be read.</summary>
-    public static bool? ShowsPasswordField(IntPtr window)
-    {
-        try
-        {
-            var page = PageIn(window);
-            return page == null ? null : ReadForm(page).Fields.Any(f => f.Usable && f.IsPassword);
-        }
-        catch (Exception ex) when (ex is ElementNotAvailableException or TimeoutException or InvalidOperationException or System.Runtime.InteropServices.COMException or ArgumentException)
-        {
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// The page shown in a browser window, also when nothing lies in the middle of the window to find it by (a short
-    /// page after signing in): through the cursor, then the middle of the window, then the window's elements.
-    /// </summary>
-    private static AutomationElement? PageIn(IntPtr window)
-    {
-        Native.GetWindowThreadProcessId(window, out var pid);
-        var focused = AutomationElement.FocusedElement;
-        if (focused != null && focused.Current.ProcessId == pid && Container(focused) is { } container && container.Current.ControlType == ControlType.Document)
-            return container;
-        return PageOf(window) ?? AutomationElement.FromHandle(window).FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Document));
     }
 
     private static readonly CacheRequest LabelProperties = CreateLabelRequest();
