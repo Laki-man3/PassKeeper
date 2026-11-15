@@ -134,7 +134,7 @@ A separate app on Avalonia with the same core: the vault, the encryption and the
 | Not yet | suggestions at sign-in fields, filling a sign-in form by itself when it opens, automatic sign-in to VPN clients, import straight from browsers |
 | Start | `--minimized` starts in the tray (menu bar); on Linux, keeping the app in the tray on close is off by default (GNOME shows tray icons only with an extension) |
 | Data | macOS `~/Library/Application Support/PassKeeper`, Linux `~/.local/share/PassKeeper`, readable by the owner only; `--data <dir>` for another folder |
-| Status | the same code is tested on Windows; the macOS and Linux builds have not been run on those systems yet |
+| Status | preview; release jobs run native-window smoke tests from the final packages on macOS and Linux, in addition to Windows unit tests |
 
 Moving entries: on one computer Export → PassKeeper (.pkx), on the other Import that file. Works between Windows, macOS and Linux in any direction.
 
@@ -161,7 +161,7 @@ Requires .NET 10 SDK; 7-Zip for the split archive (optional).
 powershell -ExecutionPolicy Bypass -File .\build.ps1
 ```
 
-Output in `dist\<version>\`: installer, portable zip, `SHA256SUMS.txt`, `7z\` volumes. Then `build-desktop.ps1` adds the macOS and Linux packages (built on Windows as well). Tests: `dotnet test tests/PassKeeper.Tests`.
+Output in `dist\<version>\`: installer, portable zip, `SHA256SUMS.txt`, `7z\` volumes. `build-desktop.ps1` adds the desktop packages; macOS packages must be finalized on macOS using the built-in `codesign` and `ditto` tools. Linux packages can be built on any host with `-Runtime linux-x64`. Unit tests (Windows): `dotnet test tests/PassKeeper.Tests`.
 
 With PowerShell 7 and the .NET 10 SDK, a single desktop target can also be built on its own OS, for example on Apple Silicon:
 
@@ -184,7 +184,11 @@ git push origin v1.6.1
 
 The tag must be exactly `v<Version>` (for example, `v1.6.1` for `1.6.1`); a mismatch fails before any builds. After **all** builds and tests succeed, the workflow creates a GitHub release with generated notes, the Windows installer and portable zip, both macOS `.app` zip archives, the Linux tarball and one `SHA256SUMS.txt` covering all five packages. No signing secrets or personal access token are required: only the release job gets `contents: write` for the built-in `GITHUB_TOKEN`.
 
-The workflow uploads assets to a draft before publishing it and never overwrites an existing release. If an upload fails after the draft has been created, inspect and delete that incomplete draft before re-running the release job. Manual dispatch is build-only, even when a tag is selected. Forks publish to their own repository. macOS/Linux remain preview builds; packaging does not replace GUI testing, Apple signing or notarization.
+The workflow uploads assets to a draft before publishing it and never overwrites an existing release. If an upload fails after the draft has been created, inspect and delete that incomplete draft before re-running the release job. Manual dispatch is build-only, even when a tag is selected. Forks publish to their own repository.
+
+Desktop jobs extract the **final archive** and exercise a real native window: create a temporary vault, save an entry, rebuild the tray menu, save settings, lock and reopen the vault, and verify the saved entry. Linux runs in Xvfb/Openbox with an isolated D-Bus/Secret Service session and also checks PIN storage and hotkey collisions. Screenshots and logs are uploaded even on failure; failed smoke tests block publication. macOS bundles are ad-hoc signed and verified after extraction, but are **not** Apple Developer ID signed or notarized, so a downloaded copy still needs first-launch approval. macOS/Linux remain preview builds; these smoke tests do not certify every desktop environment, auto-type permission or end-to-end feature.
+
+To repeat the package check on macOS: `python3 -I tests/e2e/smoke-package.py <package.zip> <new-output-directory>`. On Linux use `bash tests/e2e/smoke-linux.sh <package.tar.gz> <new-output-directory>` with the runtime/test dependencies listed in the workflow. The opt-in `--smoke-test <output-directory>` application flag always uses a new temporary data directory, removes it on normal completion, and never uses your vault. Native PIN testing is optional unless `PASSKEEPER_SMOKE_PIN=1`; macOS CI does not require an interactive Keychain permission prompt.
 
 | Path | Contents |
 |---|---|
@@ -339,7 +343,7 @@ PassKeeper-Setup-1.6.0.exe /S /allusers /desktop /autostart
 | Пока нет | подсказок у полей входа, заполнения формы входа при её открытии, автовхода в VPN‑клиенты, импорта напрямую из браузеров |
 | Запуск | `--minimized` — сразу в трей (строку меню); в Linux закрытие окна в трей по умолчанию выключено (GNOME показывает значки в трее только с расширением) |
 | Данные | macOS `~/Library/Application Support/PassKeeper`, Linux `~/.local/share/PassKeeper`, доступны только владельцу; другая папка — `--data <папка>` |
-| Состояние | тот же код проверен на Windows; на самих macOS и Linux сборки ещё не запускались |
+| Состояние | предварительная версия; задания релиза проверяют настоящее окно из конечных пакетов на macOS и Linux, дополнительно к модульным тестам Windows |
 
 Перенос записей: на одном компьютере Экспорт → PassKeeper (.pkx), на другом — Импорт этого файла. Работает между Windows, macOS и Linux в любую сторону.
 
@@ -366,7 +370,7 @@ tar -xzf PassKeeper-1.6.0-linux-x64.tar.gz
 powershell -ExecutionPolicy Bypass -File .\build.ps1
 ```
 
-Результат в `dist\<версия>\`: установщик, портативный zip, `SHA256SUMS.txt`, тома `7z\`. Затем `build-desktop.ps1` добавляет пакеты для macOS и Linux (они тоже собираются на Windows). Тесты: `dotnet test tests/PassKeeper.Tests`.
+Результат в `dist\<версия>\`: установщик, портативный zip, `SHA256SUMS.txt`, тома `7z\`. `build-desktop.ps1` добавляет настольные пакеты; окончательная упаковка macOS выполняется на macOS встроенными `codesign` и `ditto`. Пакеты Linux можно собрать на любой ОС с `-Runtime linux-x64`. Модульные тесты (Windows): `dotnet test tests/PassKeeper.Tests`.
 
 С PowerShell 7 и .NET 10 SDK отдельную настольную версию можно собрать на её ОС, например на Apple Silicon:
 
@@ -389,7 +393,11 @@ git push origin v1.6.1
 
 Тег должен точно совпадать с `v<Version>` (например, `v1.6.1` для `1.6.1`); несовпадение останавливает процесс до сборок. После успешного завершения **всех** сборок и тестов workflow создаёт GitHub Release с автоматически сформированным описанием, установщиком и портативным zip для Windows, двумя архивами `.app` для macOS, tarball для Linux и общим `SHA256SUMS.txt` для всех пяти пакетов. Секреты подписи и личный токен не нужны: право `contents: write` встроенного `GITHUB_TOKEN` получает только задание публикации.
 
-Сначала файлы загружаются в черновик, затем релиз публикуется; существующий релиз не перезаписывается. Если загрузка оборвалась после создания черновика, проверьте и удалите этот незавершённый черновик перед повторным запуском задания публикации. Ручной запуск только собирает пакеты, даже при выборе тега. Форки публикуют в свой репозиторий. macOS/Linux остаются предварительными версиями; упаковка не заменяет проверку GUI, подпись Apple или нотарификацию.
+Сначала файлы загружаются в черновик, затем релиз публикуется; существующий релиз не перезаписывается. Если загрузка оборвалась после создания черновика, проверьте и удалите этот незавершённый черновик перед повторным запуском задания публикации. Ручной запуск только собирает пакеты, даже при выборе тега. Форки публикуют в свой репозиторий.
+
+Настольные задания распаковывают **конечный архив** и проверяют настоящее окно: создание временного хранилища, сохранение записи, перестроение меню трея, сохранение настроек, блокировку и повторное открытие хранилища с проверкой записи. Linux запускается в Xvfb/Openbox с изолированным сеансом D-Bus/Secret Service; дополнительно проверяются PIN и конфликт горячих клавиш. Скриншоты и логи загружаются даже при сбое; неуспешный smoke-тест блокирует публикацию. Пакет macOS получает ad-hoc подпись, проверяемую после распаковки, но **не** подпись Apple Developer ID и нотарификацию: скачанную копию по-прежнему нужно разрешить при первом запуске. macOS/Linux остаются предварительными версиями; smoke-тесты не подтверждают каждое окружение рабочего стола, разрешение автоввода и все функции приложения.
+
+Повтор проверки на macOS: `python3 -I tests/e2e/smoke-package.py <package.zip> <новая-папка-результатов>`. На Linux: `bash tests/e2e/smoke-linux.sh <package.tar.gz> <новая-папка-результатов>` с зависимостями из workflow. Флаг приложения `--smoke-test <папка-результатов>` всегда использует новую временную папку данных, удаляет её при штатном завершении и не обращается к вашему хранилищу. Проверка системного PIN включается через `PASSKEEPER_SMOKE_PIN=1`; macOS CI не требует интерактивного подтверждения доступа к Связке ключей.
 
 | Путь | Содержимое |
 |---|---|

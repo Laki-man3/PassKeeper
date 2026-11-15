@@ -6,7 +6,8 @@
     PassKeeper-<version>-linux-x64.tar.gz  folder with PassKeeper and install.sh
   and adds them to dist\<version>\SHA256SUMS.txt. Run after build.ps1 (which empties dist\<version>).
   Self-contained: no .NET installation is needed on the target system.
-  Use -Runtime to build only selected targets. Works with PowerShell 7 on Windows, macOS and Linux.
+  Use -Runtime to build only selected targets. macOS packages must be finalized on macOS for ad-hoc signing.
+  Linux packages can be built on any OS with PowerShell 7 and .NET 10.
 
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File .\build-desktop.ps1
@@ -18,6 +19,10 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+if (($Runtime -contains "osx-arm64" -or $Runtime -contains "osx-x64") -and
+    -not [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::OSX)) {
+    throw "macOS packaging requires macOS (codesign and ditto). Use -Runtime linux-x64 here, or a macOS runner."
+}
 $root = $PSScriptRoot
 $version = ([xml](Get-Content (Join-Path $root "Directory.Build.props"))).Project.PropertyGroup.Version
 $artifacts = Join-Path $root "artifacts/$version/desktop"

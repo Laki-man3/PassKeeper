@@ -217,32 +217,35 @@ public sealed class LinuxPlatform : IDesktopPlatform
     {
         private static XErrorHandler? _handler;
         private static nint _previousHandler;
-        private static volatile int _lastError;
+        private static readonly object HandlerLock = new();
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<nint, int> GrabErrors = new();
+        private readonly Thread _thread;
         private volatile bool _stop;
 
         public string? Error { get; private set; }
 
         public HotkeyGrab(nuint keysym, uint mods, Action pressed)
         {
-            using var ready = new ManualResetEventSlim();
-            new Thread(() =>
+            var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            _thread = new Thread(() =>
             {
                 var display = XOpenDisplay(null);
                 if (display == 0)
                 {
                     Error = Loc.T("AutoType.NoX11");
-                    ready.Set();
+                    ready.SetResult();
                     return;
                 }
                 InstallErrorHandler();
                 var root = XDefaultRootWindow(display);
                 var code = XKeysymToKeycode(display, keysym);
                 uint[] variants = [0, 0x02, 0x10, 0x12]; // none, Lock, Mod2 (Num Lock), both
-                _lastError = 0;
-                foreach (var v in variants) XGrabKey(display, code, mods | v, root, true, 1, 1);
+                GrabErrors[display] = 0;
+                if (code != 0)
+                    foreach (var v in variants) XGrabKey(display, code, mods | v, root, true, 1, 1);
                 XSync(display, false);
-                if (code == 0 || _lastError != 0) Error = Loc.T("AutoType.HotkeyTaken");
-                ready.Set();
+                if (code == 0 || GrabErrors[display] != 0) Error = Loc.T("AutoType.HotkeyTaken");
+                ready.SetResult();
                 var e = new byte[192];
                 while (!_stop && Error == null)
                 {
@@ -253,27 +256,46 @@ public sealed class LinuxPlatform : IDesktopPlatform
                     }
                     Thread.Sleep(40);
                 }
-                foreach (var v in variants) XUngrabKey(display, code, mods | v, root);
+                if (code != 0)
+                    foreach (var v in variants) XUngrabKey(display, code, mods | v, root);
                 XCloseDisplay(display);
-            }) { IsBackground = true, Name = "PassKeeper hotkey" }.Start();
-            ready.Wait(3000);
+                GrabErrors.TryRemove(display, out _);
+            }) { IsBackground = true, Name = "PassKeeper hotkey" };
+            _thread.Start();
+            if (!ready.Task.Wait(3000))
+            {
+                Error = Loc.T("AutoType.NoX11");
+                _stop = true;
+            }
         }
 
         /// <summary>A refused grab (another program has the key) must not end the program, as Xlib's default handler would.</summary>
-        private static void InstallErrorHandler()
+        private static unsafe void InstallErrorHandler()
         {
-            if (_handler != null) return;
-            _handler = (display, error) =>
+            lock (HandlerLock)
             {
-                _lastError = Marshal.ReadByte(error, 32); // XErrorEvent.error_code
-                if (_previousHandler != 0)
-                    return Marshal.GetDelegateForFunctionPointer<XErrorHandler>(_previousHandler)(display, error);
-                return 0;
-            };
-            _previousHandler = XSetErrorHandler(_handler);
+                if (_handler != null) return;
+                _handler = (display, error) =>
+                {
+                    if (GrabErrors.ContainsKey(display))
+                    {
+                        GrabErrors[display] = Marshal.ReadByte(error, 32); // XErrorEvent.error_code on supported 64-bit Linux
+                        return 0; // A refused grab on our connection is handled locally, not by Xlib's fatal default.
+                    }
+                    // Avalonia may have registered a managed delegate of a different type. Converting its pointer
+                    // with GetDelegateForFunctionPointer<T> throws InvalidCastException; call the native ABI instead.
+                    return _previousHandler == 0 ? 0 : ((delegate* unmanaged[Cdecl]<nint, nint, int>)_previousHandler)(display, error);
+                };
+                _previousHandler = XSetErrorHandler(_handler);
+            }
         }
 
-        public void Dispose() => _stop = true;
+        public void Dispose()
+        {
+            _stop = true;
+            // Release the old grab before settings immediately register its replacement.
+            if (Thread.CurrentThread != _thread) _thread.Join(3000);
+        }
     }
 
     // ---------------------------------------------------------------- Xlib helpers

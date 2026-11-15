@@ -100,6 +100,35 @@ jobs:
       - name: Build desktop package
         shell: pwsh
         run: ./build-desktop.ps1 -Runtime ${{ matrix.runtime }}
+      - name: Install Linux runtime and smoke-test dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            xvfb xauth openbox dbus-x11 gnome-keyring libsecret-tools libsecret-1-0 \
+            libxtst6 libx11-6 libice6 libsm6 libfontconfig1 libfreetype6 libxcursor1 \
+            libxrandr2 libxi6 libxext6 libxfixes3 libgl1 libgl1-mesa-dri libicu70
+      - name: Smoke-test macOS release archive
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          PACKAGE: dist/${{ needs.version.outputs.version }}/PassKeeper-${{ needs.version.outputs.version }}-${{ matrix.package }}
+        run: python3 -I tests/e2e/smoke-package.py "$PACKAGE" artifacts/smoke
+      - name: Smoke-test Linux release archive with native PIN storage
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          PACKAGE: dist/${{ needs.version.outputs.version }}/PassKeeper-${{ needs.version.outputs.version }}-${{ matrix.package }}
+        run: bash tests/e2e/smoke-linux.sh "$PACKAGE" artifacts/smoke
+      - name: Upload smoke-test evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: smoke-${{ matrix.runtime }}
+          path: artifacts/smoke
+          if-no-files-found: warn
+          retention-days: 14
       - name: Upload desktop package
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

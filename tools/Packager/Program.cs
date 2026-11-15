@@ -1,11 +1,12 @@
 using System.Buffers.Binary;
+using System.Diagnostics;
 using System.Formats.Tar;
 using System.IO.Compression;
 using System.Text;
 
 // packager linux <publishDir> <out.tar.gz> <version> <icon.png>
 // packager macos <publishDir> <out.zip> <version> <icon.png>
-// Files get Unix modes (executables 0755, the rest 0644): built on Windows, they keep them when unpacked on Linux or macOS.
+// Linux tar entries get Unix modes on any host. macOS bundles require native codesign/ditto finalization.
 const UnixFileMode Exec = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead
     | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherExecute;
 const UnixFileMode Plain = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead | UnixFileMode.OtherRead;
@@ -57,29 +58,57 @@ int Linux()
 
 int MacOs()
 {
-    const string app = "PassKeeper.app/Contents";
-    using var zip = ZipFile.Open(output, ZipArchiveMode.Create);
-    void Add(string name, byte[] data, bool exec)
+    if (!OperatingSystem.IsMacOS())
+        return Fail("macOS packages must be finalized on macOS: codesign and ditto are required.");
+
+    var staging = Path.Combine(Path.GetTempPath(), "PassKeeper-package-" + Guid.NewGuid().ToString("N"));
+    var app = Path.Combine(staging, "PassKeeper.app");
+    var contents = Path.Combine(app, "Contents");
+    var macos = Path.Combine(contents, "MacOS");
+    var resources = Path.Combine(contents, "Resources");
+    var runtime = Path.Combine(resources, "runtime");
+    try
     {
-        var entry = zip.CreateEntry(name, CompressionLevel.Optimal);
-        // Unix mode in the upper 16 bits, "regular file" type bits included: macOS's Archive Utility and unzip keep it.
-        entry.ExternalAttributes = (int)((0x8000u | (uint)(exec ? Exec : Plain)) << 16);
-        using var stream = entry.Open();
-        stream.Write(data);
+        Directory.CreateDirectory(macos);
+        Directory.CreateDirectory(runtime);
+        foreach (var path in Directory.EnumerateFiles(publish, "*", SearchOption.AllDirectories).Order(StringComparer.Ordinal))
+        {
+            var relative = Path.GetRelativePath(publish, path);
+            var destination = relative == "PassKeeper" ? Path.Combine(macos, relative) : Path.Combine(runtime, relative);
+            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+            File.Copy(path, destination);
+            File.SetUnixFileMode(destination, IsExecutable(relative) ? Exec : Plain);
+        }
+        // apphost resolves the managed entry point's symlink and discovers the self-contained runtime beside it.
+        // Keep data/managed assemblies out of MacOS: codesign otherwise treats them as nested executable code
+        // and puts their signatures in extended attributes, which ordinary ZIP writers discard.
+        File.CreateSymbolicLink(Path.Combine(macos, "PassKeeper.dll"), "../Resources/runtime/PassKeeper.dll");
+        File.WriteAllText(Path.Combine(contents, "Info.plist"), InfoPlist(version), new UTF8Encoding(false));
+        File.WriteAllBytes(Path.Combine(resources, "PassKeeper.icns"), Icns(File.ReadAllBytes(icon)));
+
+        foreach (var path in Directory.EnumerateFiles(runtime, "*", SearchOption.AllDirectories))
+            if (path.EndsWith(".dylib", StringComparison.Ordinal) || Path.GetFileName(path) == "createdump")
+                Run("/usr/bin/codesign", "--force", "--sign", "-", "--timestamp=none", path);
+        // Sign the completed bundle, not just apphost: Info.plist and resources must be sealed together.
+        Run("/usr/bin/codesign", "--force", "--sign", "-", "--timestamp=none", app);
+        Run("/usr/bin/codesign", "--verify", "--deep", "--strict", app);
+        Run("/usr/bin/ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", app, Path.GetFullPath(output));
+        Console.WriteLine($"macos (ad-hoc signed, not notarized): {output}");
+        return 0;
     }
-    foreach (var path in Directory.EnumerateFiles(publish, "*", SearchOption.AllDirectories).Order(StringComparer.Ordinal))
+    finally
     {
-        var relative = Path.GetRelativePath(publish, path).Replace('\\', '/');
-        Add($"{app}/MacOS/{relative}", File.ReadAllBytes(path), IsExecutable(relative));
+        if (Directory.Exists(staging)) Directory.Delete(staging, recursive: true);
     }
-    Add($"{app}/Info.plist", Encoding.UTF8.GetBytes(InfoPlist(version)), false);
-    Add($"{app}/Resources/PassKeeper.icns", Icns(File.ReadAllBytes(icon)), false);
-    Console.WriteLine($"macos: {output}");
-    var main = Path.Combine(publish, "PassKeeper");
-    Console.WriteLine("  PassKeeper executable signed: " + (HasCodeSignature(main) ? "yes (ad-hoc)" : "NO"));
-    foreach (var dylib in Directory.EnumerateFiles(publish, "*.dylib"))
-        if (!HasCodeSignature(dylib)) Console.WriteLine("  not signed: " + Path.GetFileName(dylib));
-    return 0;
+}
+
+static void Run(string executable, params string[] arguments)
+{
+    var start = new ProcessStartInfo(executable) { UseShellExecute = false };
+    foreach (var argument in arguments) start.ArgumentList.Add(argument);
+    using var process = Process.Start(start) ?? throw new IOException($"Could not start {executable}.");
+    process.WaitForExit();
+    if (process.ExitCode != 0) throw new IOException($"{executable} failed (exit code {process.ExitCode}).");
 }
 
 // An .icns with one 256x256 PNG image ("ic08"): macOS scales it for the Dock and Finder.
@@ -92,42 +121,6 @@ static byte[] Icns(byte[] png)
     BinaryPrimitives.WriteUInt32BigEndian(result.AsSpan(12), (uint)(8 + png.Length));
     png.CopyTo(result, 16);
     return result;
-}
-
-// A Mach-O file (thin, 64-bit) has an LC_CODE_SIGNATURE load command when it is signed, ad-hoc included: Apple Silicon
-// runs nothing unsigned.
-static bool HasCodeSignature(string path)
-{
-    if (!File.Exists(path)) return false;
-    var data = File.ReadAllBytes(path);
-    if (data.Length < 8) return false;
-    // A universal file (several architectures): every slice must be signed.
-    if (BinaryPrimitives.ReadUInt32BigEndian(data) == 0xCAFEBABE)
-    {
-        var slices = BinaryPrimitives.ReadUInt32BigEndian(data.AsSpan(4));
-        for (var i = 0; i < slices; i++)
-        {
-            var at = 8 + i * 20;
-            var offset = (int)BinaryPrimitives.ReadUInt32BigEndian(data.AsSpan(at + 8));
-            var size = (int)BinaryPrimitives.ReadUInt32BigEndian(data.AsSpan(at + 12));
-            if (!ThinSigned(data.AsSpan(offset, size))) return false;
-        }
-        return slices > 0;
-    }
-    return ThinSigned(data);
-}
-
-static bool ThinSigned(ReadOnlySpan<byte> data)
-{
-    if (data.Length < 32 || BinaryPrimitives.ReadUInt32LittleEndian(data) != 0xFEEDFACF) return false;
-    var count = BinaryPrimitives.ReadUInt32LittleEndian(data[16..]);
-    var offset = 32;
-    for (var i = 0; i < count && offset + 8 <= data.Length; i++)
-    {
-        if (BinaryPrimitives.ReadUInt32LittleEndian(data[offset..]) == 0x1D) return true;
-        offset += (int)BinaryPrimitives.ReadUInt32LittleEndian(data[(offset + 4)..]);
-    }
-    return false;
 }
 
 static string InfoPlist(string version) => $"""
@@ -143,7 +136,7 @@ static string InfoPlist(string version) => $"""
       <key>CFBundlePackageType</key><string>APPL</string>
       <key>CFBundleExecutable</key><string>PassKeeper</string>
       <key>CFBundleIconFile</key><string>PassKeeper</string>
-      <key>LSMinimumSystemVersion</key><string>14.0</string>
+      <key>LSMinimumSystemVersion</key><string>15.0</string>
       <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
       <key>NSHighResolutionCapable</key><true/>
     </dict>
