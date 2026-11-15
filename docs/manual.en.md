@@ -91,7 +91,7 @@ The key button next to the password or **Password generator** in the left pane: 
 
 ## Autofill in browsers {#browser}
 
-**Automatically.** When a sign-in page opens, PassKeeper finds its form: if the cursor is not in a field, it puts it into the login field (with a click when the browser ignores the request, and only when nothing covers the field) and fills in the login and password. Each page is filled once; fields the browser or you already filled are left alone. Enter is pressed only with **Press Enter after filling** on or with **Sign in automatically** on in the entry ([Automatic sign-in to websites](#autologin-web)). Turned off in **Settings → Autofill → Fill in sign-in forms automatically**.
+**Automatically.** When a sign-in page opens, PassKeeper finds its form: if the cursor is not in a field, it puts it into the login field (with a click when the browser ignores the request, and only when nothing covers the field) and fills in the login and password. Each page is filled once; fields the browser or you already filled are left alone. Enter is pressed only with **Sign in automatically** on in the entry ([Automatic sign-in to websites](#autologin-web)). Turned off in **Settings → Autofill → Fill in sign-in forms automatically**.
 
 **Which entry is filled in.**
 
@@ -149,6 +149,7 @@ No need to add windows by hand:
 For entries with **Sign in automatically** on: when the client's sign-in window appears, PassKeeper fills the fields and presses Enter.
 
 - If the vault is locked, PassKeeper asks for the PIN right away and signs in after unlocking. This also works for a sign-in window that was open before PassKeeper started (when it starts with Windows, for example).
+- When a client takes long to load and its sign-in fields come later, PassKeeper waits for them for about a minute while the client's window is in front. A separate sign-in window the client opens after its main window is filled right away.
 - Each window is handled once. Only failed attempts count: at most 2 per entry in 10 minutes, so a wrong password cannot lock the account; a notification tells when the limit is reached.
 - A sign-in counts as successful when the sign-in window is gone and does not come back. PassKeeper cannot see the server's answer, so a window closed by hand after a refusal also counts as a successful sign-in.
 - If a client has several entries, the one whose server address is in the window title is used; otherwise automatic sign-in is skipped and the suggestion is shown.
@@ -295,7 +296,7 @@ On every save the previous vault is kept as `vault.pkv.bak`, and once a day a co
 |---|---|
 | General | language, appearance (dark, light, as Windows), start with Windows, minimize to tray |
 | Security | auto-lock, clipboard clearing, lock with Windows, change master password and PIN |
-| Autofill | hotkey, suggestions at fields, automatic filling of sign-in forms, autofill log, automatic sign-in to VPN clients and programs, automatic sign-in to websites, offer to save sign-ins, Enter after filling, compatibility typing mode, delay between keystrokes |
+| Autofill | hotkey, suggestions at fields, automatic filling of sign-in forms, autofill log, automatic sign-in to VPN clients and programs, automatic sign-in to websites, offer to save sign-ins, compatibility typing mode, delay between keystrokes |
 | Profile | sign out, delete the user |
 | Data | vault folder, backup |
 | About | version, installation mode, uninstall, the author's contacts for remarks and suggestions (Telegram, e-mail, GitHub) |

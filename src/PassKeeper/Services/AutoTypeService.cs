@@ -106,13 +106,20 @@ public sealed class AutoTypeService
                 await FillFieldAsync(entry, field);
                 return;
             }
-            await TypeAsync(entry, target, AutoTypeSequence.EffectiveSequence(entry, _app.Settings.SubmitAfterFill));
+            await TypeAsync(entry, target, AutoTypeSequence.EffectiveSequence(entry, PressesEnter(entry)));
         }
         finally
         {
             _busy = false;
         }
     }
+
+    /// <summary>
+    /// Enter after filling at the user's request (hotkey, "Auto-type"): for an entry that signs in automatically, with
+    /// automatic sign-in on for its kind (websites or clients). An entry's own typing order says it itself.
+    /// </summary>
+    private bool PressesEnter(VaultEntry entry) =>
+        entry.SignsInToSite ? _app.Settings.AutoLoginWeb : entry.SignsInToProgram && _app.Settings.AutoLogin;
 
     /// <summary>The entry is filled field by field: it has no sequence, or one made of fields only.</summary>
     public static bool FillsByFields(VaultEntry entry) =>
@@ -131,7 +138,7 @@ public sealed class AutoTypeService
             {
                 main.WindowState = System.Windows.WindowState.Minimized;
                 await Task.Delay(250);
-                if (!await FillWindowAsync(entry, window.Handle, _app.Settings.SubmitAfterFill))
+                if (!await FillWindowAsync(entry, window.Handle, PressesEnter(entry)))
                     _app.Tray?.ShowBalloon("PassKeeper", Loc.T("AutoType.NoForm"));
                 return;
             }
@@ -145,7 +152,7 @@ public sealed class AutoTypeService
             return;
         }
         var target = await Task.Run(() => TargetDetector.Capture(hwnd, detectUrl: false));
-        await TypeAsync(entry, target, AutoTypeSequence.EffectiveSequence(entry, _app.Settings.SubmitAfterFill));
+        await TypeAsync(entry, target, AutoTypeSequence.EffectiveSequence(entry, PressesEnter(entry)));
     }
 
     private readonly Dictionary<string, DateTime> _autoFilled = [];
@@ -268,7 +275,7 @@ public sealed class AutoTypeService
     public async Task FillAndSignInAsync(VaultEntry entry, LoginField field, TargetWindow? target)
     {
         var signIn = SignsInOnSite(entry, target);
-        var (passwordTyped, entered) = await FillFieldAsync(entry, field, signIn || _app.Settings.SubmitAfterFill);
+        var (passwordTyped, entered) = await FillFieldAsync(entry, field, signIn);
         if (!signIn) return;
         if (!entered)
         {
@@ -715,7 +722,7 @@ public sealed class AutoTypeService
         }
         var login = ValueFor(entry, FieldKind.Login);
         var sender = CreateSender(field.Window);
-        var submit = submitAfter ?? _app.Settings.SubmitAfterFill;
+        var submit = submitAfter ?? PressesEnter(entry);
         var filled = new List<System.Windows.Rect> { field.Bounds };
         var passwordTyped = false;
         var entered = false;

@@ -32,7 +32,6 @@ public sealed class AppSettings
     public bool AutoLoginWeb { get; set; } = true;
     /// <summary>Known client ids / executable names that have auto sign-in entries (read while the vault is locked).</summary>
     public List<string> AutoLoginTriggers { get; set; } = [];
-    public bool SubmitAfterFill { get; set; }
     /// <summary>After the user signs in by hand on a site without an entry, offer to save one (nothing is read from the form).</summary>
     public bool OfferToSave { get; set; } = true;
     /// <summary>Sites (host names) where saving a sign-in is not offered.</summary>

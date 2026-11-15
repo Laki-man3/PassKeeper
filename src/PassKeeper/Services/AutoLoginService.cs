@@ -15,7 +15,13 @@ public sealed class AutoLoginService
 {
     public const int MaxAttempts = 2;
     public static readonly TimeSpan AttemptWindow = TimeSpan.FromMinutes(10);
-    private static readonly TimeSpan FormWait = TimeSpan.FromSeconds(6);
+
+    /// <summary>
+    /// Pauses between looks for a window's sign-in form: often at first, then every few seconds for a client that
+    /// takes its time to load (about 50 s in all), and only while the window stays in front.
+    /// </summary>
+    private static readonly int[] FormLookPauses =
+        [0, 400, 400, 400, 400, 600, 800, 1000, 1000, 1500, 1500, 2000, 2000, 2000, 3000, 3000, 3000, 3000, 3000, 3000, 3000, 3000, 3000, 3000, 3000, 3000];
 
     private const uint GaRoot = 2;
 
@@ -26,6 +32,7 @@ public sealed class AutoLoginService
     private readonly SignInAttempts _attempts = new(MaxAttempts, AttemptWindow, TimeSpan.FromSeconds(30));
     private bool _enabled;
     private IntPtr _busyWindow;
+    private IntPtr _turnedAway;
     private int _autoEntries;
 
     public AutoLoginService(App app, ForegroundWatcher foreground)
@@ -60,13 +67,21 @@ public sealed class AutoLoginService
         if (_app.AutoType.IsBusy) return false; // the hotkey is being handled (an entry is being chosen)
         // Nothing to sign in to: return before looking at the window at all.
         if (_app.Vault.IsUnlocked ? _autoEntries == 0 : _app.Settings.AutoLoginTriggers.Count == 0) return false;
-        if (_busyWindow != IntPtr.Zero) return false;
         Expire();
         if (_done.ContainsKey(hwnd)) return false;
         if (field == null && _checked.ContainsKey(hwnd)) return false;
 
         var target = TargetDetector.Capture(hwnd, detectUrl: false);
         if (target.IsBrowser || target.ProcessName.Length == 0) return false;
+        if (_busyWindow != IntPtr.Zero)
+        {
+            // Another window is being looked at (the client's main window, while this is its sign-in window): this
+            // one is taken up as soon as that look ends, and is not filled meanwhile by the suggestion either.
+            if (!(_app.Vault.IsUnlocked ? Pick(target) != null : IsTrigger(target))) return false;
+            if (_turnedAway != hwnd) AutoFillLog.Write($"sign-in window of {target.ProcessName}: taken up once the window before it is done");
+            _turnedAway = hwnd;
+            return true;
+        }
 
         _busyWindow = hwnd;
         try
@@ -76,14 +91,23 @@ public sealed class AutoLoginService
                 // Entries are encrypted while locked: the trigger list tells which clients have auto sign-in.
                 if (!IsTrigger(target) || !_unlockAsked.Add(hwnd)) return false;
                 if (!await QuickUnlockWindow.ShowAsync(target.Describe())) return true;
+                // The PIN was asked for this window: it comes back to the front to be signed in to.
+                Native.ForceForeground(hwnd);
             }
             var entry = Pick(target);
             if (entry == null) return false;
-            var form = field ?? await WaitForFormAsync(hwnd);
+            AutoFillLog.Write($"sign-in window of {target.ProcessName}: \"{entry.Title}\"" + (field != null ? ", the cursor is in its form" : ", looking for its form"));
+            var form = field;
             if (form == null)
             {
-                _checked[hwnd] = DateTime.UtcNow;
-                return false;
+                var (found, left) = await WaitForFormAsync(hwnd);
+                if (found == null)
+                {
+                    // A look cut short (another window came to the front) starts again when this window is back.
+                    if (!left) _checked[hwnd] = DateTime.UtcNow;
+                    return false;
+                }
+                form = found;
             }
             if (_app.AutoType.IsTyping || _done.ContainsKey(hwnd)) return true;
             _done[hwnd] = DateTime.UtcNow;
@@ -102,6 +126,9 @@ public sealed class AutoLoginService
         finally
         {
             _busyWindow = IntPtr.Zero;
+            var next = _turnedAway;
+            _turnedAway = IntPtr.Zero;
+            if (next != IntPtr.Zero && next != hwnd && _enabled) _ = TryWindowAsync(next, null);
         }
     }
 
@@ -118,16 +145,43 @@ public sealed class AutoLoginService
         return byServer.Count == 1 ? byServer[0].Entry : null;
     }
 
-    private async Task<LoginField?> WaitForFormAsync(IntPtr hwnd)
+    /// <summary>
+    /// Looks for the window's sign-in form until it appears (a client may show its window long before the fields).
+    /// <c>Left</c>: the look was cut short because the window closed, went to the back, or another client window
+    /// is waiting.
+    /// </summary>
+    private async Task<(LoginField? Form, bool Left)> WaitForFormAsync(IntPtr hwnd)
     {
-        var deadline = DateTime.UtcNow + FormWait;
-        while (DateTime.UtcNow < deadline && Native.IsWindow(hwnd))
+        var started = Environment.TickCount64;
+        foreach (var pause in FormLookPauses)
         {
+            if (pause > 0) await Task.Delay(pause);
+            var why = _app.IsExiting || !Native.IsWindow(hwnd) || !Native.IsWindowVisible(hwnd) ? "the window closed or was hidden"
+                : _turnedAway != IntPtr.Zero ? "another sign-in window is waiting"
+                : !InFront(hwnd) ? "another window came to the front"
+                : null;
+            if (why != null)
+            {
+                AutoFillLog.Write($"  stopped looking after {Environment.TickCount64 - started} ms: {why}");
+                return (null, true);
+            }
             var field = await Task.Run(() => FieldFinder.FirstSignInField(hwnd));
-            if (field != null) return field;
-            await Task.Delay(400);
+            if (field == null) continue;
+            AutoFillLog.Write($"  sign-in form found after {Environment.TickCount64 - started} ms");
+            return (field, false);
         }
-        return null;
+        AutoFillLog.Write("  no sign-in form within 50 s");
+        return (null, false);
+    }
+
+    /// <summary>The window is in front, or PassKeeper's own window is (the PIN prompt for it).</summary>
+    private static bool InFront(IntPtr hwnd)
+    {
+        var front = Native.GetForegroundWindow();
+        var root = Native.GetAncestor(front, GaRoot);
+        if ((root != IntPtr.Zero ? root : front) == hwnd) return true;
+        Native.GetWindowThreadProcessId(front, out var pid);
+        return pid == (uint)Environment.ProcessId;
     }
 
     /// <summary>

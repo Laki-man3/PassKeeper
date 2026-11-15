@@ -53,7 +53,6 @@ public partial class SettingsDialog : DialogBase
         OfferToSave.IsChecked = Settings.OfferToSave;
         AutoFillWeb.IsChecked = Settings.AutoFillWeb;
         AutoFillLogBox.IsChecked = Settings.AutoFillLog;
-        Submit.IsChecked = Settings.SubmitAfterFill;
         Compatible.IsChecked = Settings.CompatibleTyping;
         DataPath.Text = App.Instance.Vault.DataDirectory;
         ProfileName.Text = App.Instance.Vault.UserName;
@@ -200,7 +199,6 @@ public partial class SettingsDialog : DialogBase
         Settings.OfferToSave = OfferToSave.IsChecked == true;
         Settings.AutoFillWeb = AutoFillWeb.IsChecked == true;
         Settings.AutoFillLog = AutoFillLogBox.IsChecked == true;
-        Settings.SubmitAfterFill = Submit.IsChecked == true;
         Settings.CompatibleTyping = Compatible.IsChecked == true;
         Settings.AutoLockSeconds = (int)AutoLock.EffectiveValue.TotalSeconds;
         if (ClipboardClear.SelectedItem is ComboBoxItem { Tag: int seconds }) Settings.ClipboardClearSeconds = seconds;

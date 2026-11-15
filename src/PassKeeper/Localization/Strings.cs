@@ -443,7 +443,6 @@ internal static class Strings
         ["Settings.Suggestions"] = ("Подсказки у полей входа", "Suggestions at login fields"),
         ["Settings.SuggestionsHint"] = ("При фокусе на поле логина или пароля в браузере или программе PassKeeper предложит подходящую запись",
             "When a login or password field is focused in a browser or app, PassKeeper offers the matching entry"),
-        ["Settings.Submit"] = ("Нажимать Enter после заполнения", "Press Enter after filling"),
         ["Settings.Compatible"] = ("Совместимый режим ввода", "Compatibility typing mode"),
         ["Settings.CompatibleHint"] = ("Для RDP, терминалов и старых программ, которые не принимают Unicode‑ввод", "For RDP, terminals and legacy apps that ignore Unicode input"),
         ["Settings.KeyDelay"] = ("Задержка между нажатиями", "Delay between keystrokes"),

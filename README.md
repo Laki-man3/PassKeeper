@@ -95,7 +95,7 @@ Chrome 127+ protects newly saved passwords with App-Bound Encryption, which thir
 ### Installation
 
 ```bat
-PassKeeper-Setup-1.5.3.exe
+PassKeeper-Setup-1.5.4.exe
 ```
 
 | Mode | Location | Rights |
@@ -109,7 +109,7 @@ The autostart and language chosen in the installer are used on the first run.
 Silent install: `/S`, `/allusers` or `/currentuser`, `/desktop`, `/autostart` or `/noautostart`, `/nolaunch`, `"/dir=path"`, `/lang=en|ru`. Exit codes: 0 ok, 1 error, 740 elevation required, 1602 cancelled.
 
 ```bat
-PassKeeper-Setup-1.5.3.exe /S /allusers /desktop /autostart
+PassKeeper-Setup-1.5.4.exe /S /allusers /desktop /autostart
 ```
 
 ### Uninstall
@@ -136,6 +136,7 @@ Output in `dist\<version>\`: installer, portable zip, `SHA256SUMS.txt`, `7z\` vo
 | `src/PassKeeper` | WPF application |
 | `src/PassKeeper.Setup` | installer and uninstaller (.NET Framework 4.8) |
 | `tests/PassKeeper.Tests` | unit tests |
+| `tests/e2e` | end-to-end scripts: test profiles, a test sign-in client, local sign-in pages (Windows, UI Automation) |
 | `docs/manual.*.md` | user guide (also embedded as in-app help) |
 
 ### Limitations
@@ -241,7 +242,7 @@ Chrome 127+ шифрует новые пароли App-Bound Encryption, нед�
 ### Установка
 
 ```bat
-PassKeeper-Setup-1.5.3.exe
+PassKeeper-Setup-1.5.4.exe
 ```
 
 | Режим | Папка | Права |
@@ -255,7 +256,7 @@ PassKeeper-Setup-1.5.3.exe
 Тихая установка: `/S`, `/allusers` или `/currentuser`, `/desktop`, `/autostart` или `/noautostart`, `/nolaunch`, `"/dir=путь"`, `/lang=ru|en`. Коды возврата: 0 — успех, 1 — ошибка, 740 — нужны права администратора, 1602 — отменено.
 
 ```bat
-PassKeeper-Setup-1.5.3.exe /S /allusers /desktop /autostart
+PassKeeper-Setup-1.5.4.exe /S /allusers /desktop /autostart
 ```
 
 ### Удаление
@@ -282,6 +283,7 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1
 | `src/PassKeeper` | приложение WPF |
 | `src/PassKeeper.Setup` | установщик и деинсталлятор (.NET Framework 4.8) |
 | `tests/PassKeeper.Tests` | модульные тесты |
+| `tests/e2e` | сквозные проверки: тестовые профили, тестовый клиент входа, локальные страницы входа (Windows, UI Automation) |
 | `docs/manual.*.md` | руководство пользователя (встроено в программу как справка) |
 
 ### Ограничения

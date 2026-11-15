@@ -1,0 +1,3 @@
+# Test profiles, logs and browser profiles of the runs
+run-*/
+site/*-profile/
