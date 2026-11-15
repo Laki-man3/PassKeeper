@@ -1,0 +1,156 @@
+name: Build and release
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  DOTNET_NOLOGO: '1'
+
+jobs:
+  version:
+    name: Validate version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Read version and validate release tag
+        id: version
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = ([xml](Get-Content -Raw Directory.Build.props)).Project.PropertyGroup.Version
+          if ($version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+$') {
+            throw "Directory.Build.props must contain a stable major.minor.patch version."
+          }
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -cne "v$version") {
+            throw "Tag '$env:GITHUB_REF_NAME' must match v$version from Directory.Build.props."
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+  windows:
+    name: Windows x64 (tests, installer and portable)
+    needs: version
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: '10.0.x'
+      - name: Test and build Windows packages
+        shell: pwsh
+        run: ./build.ps1 -Runtime win-x64 -VolumeSize 0
+      - name: Upload Windows packages
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: packages-win-x64
+          path: |
+            dist/${{ needs.version.outputs.version }}/PassKeeper-Setup-${{ needs.version.outputs.version }}.exe
+            dist/${{ needs.version.outputs.version }}/PassKeeper-${{ needs.version.outputs.version }}-portable-win-x64.zip
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  desktop:
+    name: ${{ matrix.name }}
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS Apple Silicon
+            os: macos-15
+            runtime: osx-arm64
+            package: macos-arm64.zip
+          - name: macOS Intel
+            os: macos-15-intel
+            runtime: osx-x64
+            package: macos-x64.zip
+          - name: Linux x64
+            os: ubuntu-22.04
+            runtime: linux-x64
+            package: linux-x64.tar.gz
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build desktop package
+        shell: pwsh
+        run: ./build-desktop.ps1 -Runtime ${{ matrix.runtime }}
+      - name: Upload desktop package
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: packages-${{ matrix.runtime }}
+          path: dist/${{ needs.version.outputs.version }}/PassKeeper-${{ needs.version.outputs.version }}-${{ matrix.package }}
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  release:
+    name: Publish GitHub release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [version, windows, desktop]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download all platform packages
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: packages-*
+          path: release
+          merge-multiple: true
+      - name: Verify packages and publish release
+        shell: bash
+        working-directory: release
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          assets=(
+            "PassKeeper-Setup-${VERSION}.exe"
+            "PassKeeper-${VERSION}-portable-win-x64.zip"
+            "PassKeeper-${VERSION}-macos-arm64.zip"
+            "PassKeeper-${VERSION}-macos-x64.zip"
+            "PassKeeper-${VERSION}-linux-x64.tar.gz"
+          )
+          for asset in "${assets[@]}"; do
+            if [[ ! -s "$asset" ]]; then
+              printf '::error::Missing or empty release asset: %s\n' "$asset"
+              exit 1
+            fi
+          done
+          sha256sum "${assets[@]}" > SHA256SUMS.txt
+          sha256sum --check SHA256SUMS.txt
+
+          # Never replace an existing release. Keep a failed upload private as a draft.
+          gh release create "$RELEASE_TAG" "${assets[@]}" SHA256SUMS.txt \
+            --verify-tag --draft --title "PassKeeper $VERSION" --generate-notes
+          gh release edit "$RELEASE_TAG" --draft=false

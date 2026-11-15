@@ -163,6 +163,29 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1
 
 Output in `dist\<version>\`: installer, portable zip, `SHA256SUMS.txt`, `7z\` volumes. Then `build-desktop.ps1` adds the macOS and Linux packages (built on Windows as well). Tests: `dotnet test tests/PassKeeper.Tests`.
 
+With PowerShell 7 and the .NET 10 SDK, a single desktop target can also be built on its own OS, for example on Apple Silicon:
+
+```sh
+pwsh -File ./build-desktop.ps1 -Runtime osx-arm64
+```
+
+Omit `-Runtime` to build all three desktop targets, or choose `osx-x64` / `linux-x64`. NuGet access is needed unless all dependencies and runtime packs are already cached.
+
+#### Automated builds and releases
+
+[Build and release](.github/workflows/release.yml) runs on branch pushes, pull requests and manual dispatches. It runs the unit tests on Windows and builds self-contained packages on Windows, macOS (Apple Silicon and Intel) and Linux. Packages are available as workflow artifacts for 14 days; these builds do **not** publish a release.
+
+To publish a release, first update `Version` and `FileVersion` in `Directory.Build.props`, merge the changes, then push a matching tag:
+
+```sh
+git tag v1.6.1
+git push origin v1.6.1
+```
+
+The tag must be exactly `v<Version>` (for example, `v1.6.1` for `1.6.1`); a mismatch fails before any builds. After **all** builds and tests succeed, the workflow creates a GitHub release with generated notes, the Windows installer and portable zip, both macOS `.app` zip archives, the Linux tarball and one `SHA256SUMS.txt` covering all five packages. No signing secrets or personal access token are required: only the release job gets `contents: write` for the built-in `GITHUB_TOKEN`.
+
+The workflow uploads assets to a draft before publishing it and never overwrites an existing release. If an upload fails after the draft has been created, inspect and delete that incomplete draft before re-running the release job. Manual dispatch is build-only, even when a tag is selected. Forks publish to their own repository. macOS/Linux remain preview builds; packaging does not replace GUI testing, Apple signing or notarization.
+
 | Path | Contents |
 |---|---|
 | `src/PassKeeper.Core` | cryptography, vault, PIN, import/export, KDBX, TOTP, matching, field classification, client catalog |
@@ -344,6 +367,29 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1
 ```
 
 Результат в `dist\<версия>\`: установщик, портативный zip, `SHA256SUMS.txt`, тома `7z\`. Затем `build-desktop.ps1` добавляет пакеты для macOS и Linux (они тоже собираются на Windows). Тесты: `dotnet test tests/PassKeeper.Tests`.
+
+С PowerShell 7 и .NET 10 SDK отдельную настольную версию можно собрать на её ОС, например на Apple Silicon:
+
+```sh
+pwsh -File ./build-desktop.ps1 -Runtime osx-arm64
+```
+
+Без `-Runtime` собираются все три настольные версии; другие значения — `osx-x64` и `linux-x64`. Нужен доступ к NuGet, если зависимости и пакеты среды выполнения ещё не закешированы.
+
+#### Автоматические сборки и релизы
+
+[Build and release](.github/workflows/release.yml) запускается при push в ветки, в pull request и вручную. Модульные тесты выполняются на Windows; самостоятельные пакеты собираются на Windows, macOS (Apple Silicon и Intel) и Linux. Пакеты доступны в артефактах запуска 14 дней; эти сборки **не** публикуют релиз.
+
+Для публикации релиза обновите `Version` и `FileVersion` в `Directory.Build.props`, влейте изменения и отправьте соответствующий тег:
+
+```sh
+git tag v1.6.1
+git push origin v1.6.1
+```
+
+Тег должен точно совпадать с `v<Version>` (например, `v1.6.1` для `1.6.1`); несовпадение останавливает процесс до сборок. После успешного завершения **всех** сборок и тестов workflow создаёт GitHub Release с автоматически сформированным описанием, установщиком и портативным zip для Windows, двумя архивами `.app` для macOS, tarball для Linux и общим `SHA256SUMS.txt` для всех пяти пакетов. Секреты подписи и личный токен не нужны: право `contents: write` встроенного `GITHUB_TOKEN` получает только задание публикации.
+
+Сначала файлы загружаются в черновик, затем релиз публикуется; существующий релиз не перезаписывается. Если загрузка оборвалась после создания черновика, проверьте и удалите этот незавершённый черновик перед повторным запуском задания публикации. Ручной запуск только собирает пакеты, даже при выборе тега. Форки публикуют в свой репозиторий. macOS/Linux остаются предварительными версиями; упаковка не заменяет проверку GUI, подпись Apple или нотарификацию.
 
 | Путь | Содержимое |
 |---|---|
