@@ -15,6 +15,11 @@ public sealed class TempDir : IDisposable
     }
 }
 
+/// <summary>Tests that use the PIN run one after another: one of them swaps the global <see cref="PinSealing.Current"/>.</summary>
+[CollectionDefinition("Pin")]
+public sealed class PinCollection;
+
+[Collection("Pin")]
 public class VaultTests
 {
     [Fact]

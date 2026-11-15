@@ -3,6 +3,10 @@
     <Project Path="src/PassKeeper.Core/PassKeeper.Core.csproj" />
     <Project Path="src/PassKeeper/PassKeeper.csproj" />
     <Project Path="src/PassKeeper.Setup/PassKeeper.Setup.csproj" />
+    <Project Path="src/PassKeeper.Desktop/PassKeeper.Desktop.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/Packager/Packager.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/PassKeeper.Tests/PassKeeper.Tests.csproj" />

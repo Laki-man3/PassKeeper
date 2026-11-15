@@ -109,6 +109,27 @@ public class InteropTests
     }
 
     [Fact]
+    public void PassKeeperEncrypted_FileMovedToAnotherComputer()
+    {
+        // The way the macOS / Linux app imports a .pkx exported on Windows (and back): format from the file, password, entries.
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".pkx");
+        File.WriteAllBytes(path, Exporter.Export(Sample(), ExportFormat.PassKeeperEncrypted, "export-pass"));
+        try
+        {
+            var format = FileImporter.Detect(path, File.ReadAllBytes(path));
+            Assert.Equal(ImportFileFormat.PassKeeperEncrypted, format);
+            Assert.True(FileImporter.NeedsPassword(format));
+            Assert.Throws<ImportPasswordRequiredException>(() => FileImporter.Import(path, format));
+            Assert.ThrowsAny<CryptographicException>(() => FileImporter.Import(path, format, "wrong-pass"));
+            Assert.Equal(3, FileImporter.Import(path, format, "export-pass").Entries.Count);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public void Csv_RecognizesThirdPartyLayouts()
     {
         var lastPass = CsvImporter.Import("url,username,password,totp,extra,name,grouping,fav\nhttps://a.com,u,p,,note,A,Social,1\nhttp://sn,,,,secret note,N,,0\n", "lp");

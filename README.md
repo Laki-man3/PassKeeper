@@ -1,6 +1,6 @@
 # PassKeeper
 
-Offline password manager for Windows. No network access, no cloud, no telemetry. Per-user installation without administrator rights or machine-wide installation for all users.
+Offline password manager for Windows, with a preview version for macOS and Linux. No network access, no cloud, no telemetry. Per-user installation without administrator rights or machine-wide installation for all users.
 
 [English](#english) · [Русский](#русский) · User guide: [EN](docs/manual.en.md), [RU](docs/manual.ru.md)
 
@@ -41,7 +41,7 @@ Offline password manager for Windows. No network access, no cloud, no telemetry.
 | Export | 13 formats |
 | UI languages | English, Russian |
 | Help | built-in user guide (works offline) |
-| Tests | 117 unit tests |
+| Tests | 119 unit tests, end-to-end scripts in `tests/e2e` |
 
 ### Features
 
@@ -95,7 +95,7 @@ Chrome 127+ protects newly saved passwords with App-Bound Encryption, which thir
 ### Installation
 
 ```bat
-PassKeeper-Setup-1.5.4.exe
+PassKeeper-Setup-1.6.0.exe
 ```
 
 | Mode | Location | Rights |
@@ -109,7 +109,7 @@ The autostart and language chosen in the installer are used on the first run.
 Silent install: `/S`, `/allusers` or `/currentuser`, `/desktop`, `/autostart` or `/noautostart`, `/nolaunch`, `"/dir=path"`, `/lang=en|ru`. Exit codes: 0 ok, 1 error, 740 elevation required, 1602 cancelled.
 
 ```bat
-PassKeeper-Setup-1.5.4.exe /S /allusers /desktop /autostart
+PassKeeper-Setup-1.6.0.exe /S /allusers /desktop /autostart
 ```
 
 ### Uninstall
@@ -120,6 +120,39 @@ Silent: `Uninstall.exe /S` (data kept), `Uninstall.exe /S /removedata`.
 
 Data: `%APPDATA%\PassKeeper` — `settings.json`, `profiles\<user>\` with `vault.pkv`, `pin.dat` (DPAPI), `Backups\`. Override with `--data <dir>`; a copy started with its own data folder runs as a separate instance.
 
+### macOS and Linux (preview)
+
+A separate app on Avalonia with the same core: the vault, the encryption and the export format are those of the Windows version.
+
+| | |
+|---|---|
+| Systems | macOS 15+ (Apple Silicon: `macos-arm64`, Intel: `macos-x64`); Linux x64 with X11 or XWayland (Ubuntu 22.04+, Debian 13, Fedora 43+ and the other distributions supported by .NET 10) |
+| Has | users with master passwords, PIN sign-in, entries with sections and folders, search, favorites, trash, 2FA codes (TOTP), password generator, auto-type, import (PKX, KDBX, CSV, JSON, 1PUX) and export (PKX, KDBX, CSV), clipboard clearing, auto-lock, tray (menu bar) icon, light and dark theme, English and Russian |
+| Auto-type | the hotkey (Ctrl+Alt+A, ⌃⌥A on macOS, set in Settings) in any window finds its entry by the window title or program, or offers a list, and types the login, Tab, the password and, with "Sign in automatically", Enter; or the entry's own typing order. Nothing is typed if another window has come to the front meanwhile. An "Auto-type" button in the entry types into the window below PassKeeper |
+| Needs | macOS: PassKeeper allowed in System Settings → Privacy & Security → Accessibility (for auto-type). Linux: an X11 session or X11 windows under Wayland and libXtst (auto-type); GNOME Keyring or KWallet (PIN) |
+| PIN | 4–12 digits; the PIN file is sealed with a key kept in the Keychain (macOS) or the Secret Service (Linux), so a copy of it is useless elsewhere; 5 mistakes reset it |
+| Not yet | suggestions at sign-in fields, filling a sign-in form by itself when it opens, automatic sign-in to VPN clients, import straight from browsers |
+| Start | `--minimized` starts in the tray (menu bar); on Linux, keeping the app in the tray on close is off by default (GNOME shows tray icons only with an extension) |
+| Data | macOS `~/Library/Application Support/PassKeeper`, Linux `~/.local/share/PassKeeper`, readable by the owner only; `--data <dir>` for another folder |
+| Status | the same code is tested on Windows; the macOS and Linux builds have not been run on those systems yet |
+
+Moving entries: on one computer Export → PassKeeper (.pkx), on the other Import that file. Works between Windows, macOS and Linux in any direction.
+
+macOS: unzip and move PassKeeper.app to Applications. The app is not signed with an Apple developer certificate, so macOS blocks the first launch: open it with the context menu → Open, allow it in System Settings → Privacy & Security → Open Anyway, or run
+
+```sh
+xattr -dr com.apple.quarantine /Applications/PassKeeper.app
+```
+
+Linux:
+
+```sh
+tar -xzf PassKeeper-1.6.0-linux-x64.tar.gz
+./PassKeeper-1.6.0/install.sh
+```
+
+`install.sh` copies the app to `~/.local/opt/PassKeeper` and adds it to the applications menu, no root rights needed; `./PassKeeper-1.6.0/PassKeeper` runs it in place.
+
 ### Build
 
 Requires .NET 10 SDK; 7-Zip for the split archive (optional).
@@ -128,13 +161,15 @@ Requires .NET 10 SDK; 7-Zip for the split archive (optional).
 powershell -ExecutionPolicy Bypass -File .\build.ps1
 ```
 
-Output in `dist\<version>\`: installer, portable zip, `SHA256SUMS.txt`, `7z\` volumes. Tests: `dotnet test tests/PassKeeper.Tests`.
+Output in `dist\<version>\`: installer, portable zip, `SHA256SUMS.txt`, `7z\` volumes. Then `build-desktop.ps1` adds the macOS and Linux packages (built on Windows as well). Tests: `dotnet test tests/PassKeeper.Tests`.
 
 | Path | Contents |
 |---|---|
 | `src/PassKeeper.Core` | cryptography, vault, PIN, import/export, KDBX, TOTP, matching, field classification, client catalog |
 | `src/PassKeeper` | WPF application |
 | `src/PassKeeper.Setup` | installer and uninstaller (.NET Framework 4.8) |
+| `src/PassKeeper.Desktop` | macOS and Linux app (Avalonia) |
+| `tools/Packager` | macOS (.app) and Linux packages with Unix file modes |
 | `tests/PassKeeper.Tests` | unit tests |
 | `tests/e2e` | end-to-end scripts: test profiles, a test sign-in client, local sign-in pages (Windows, UI Automation) |
 | `docs/manual.*.md` | user guide (also embedded as in-app help) |
@@ -188,7 +223,7 @@ MIT, see [LICENSE](LICENSE).
 | Экспорт | 13 форматов |
 | Языки интерфейса | русский, английский |
 | Справка | встроенное руководство (работает без сети) |
-| Тесты | 117 модульных тестов |
+| Тесты | 119 модульных тестов, сквозные проверки в `tests/e2e` |
 
 ### Возможности
 
@@ -242,7 +277,7 @@ Chrome 127+ шифрует новые пароли App-Bound Encryption, нед�
 ### Установка
 
 ```bat
-PassKeeper-Setup-1.5.4.exe
+PassKeeper-Setup-1.6.0.exe
 ```
 
 | Режим | Папка | Права |
@@ -256,7 +291,7 @@ PassKeeper-Setup-1.5.4.exe
 Тихая установка: `/S`, `/allusers` или `/currentuser`, `/desktop`, `/autostart` или `/noautostart`, `/nolaunch`, `"/dir=путь"`, `/lang=ru|en`. Коды возврата: 0 — успех, 1 — ошибка, 740 — нужны права администратора, 1602 — отменено.
 
 ```bat
-PassKeeper-Setup-1.5.4.exe /S /allusers /desktop /autostart
+PassKeeper-Setup-1.6.0.exe /S /allusers /desktop /autostart
 ```
 
 ### Удаление
@@ -267,6 +302,39 @@ PassKeeper-Setup-1.5.4.exe /S /allusers /desktop /autostart
 
 Данные: `%APPDATA%\PassKeeper` — `settings.json`, `profiles\<пользователь>\` с `vault.pkv`, `pin.dat` (DPAPI), `Backups\`. Другая папка: `--data <папка>`; копия со своей папкой данных работает отдельным экземпляром.
 
+### macOS и Linux (предварительная версия)
+
+Отдельное приложение на Avalonia с тем же ядром: хранилище, шифрование и формат экспорта — как у версии для Windows.
+
+| | |
+|---|---|
+| Системы | macOS 15+ (Apple Silicon: `macos-arm64`, Intel: `macos-x64`); Linux x64 с X11 или XWayland (Ubuntu 22.04+, Debian 13, Fedora 43+ и другие дистрибутивы, которые поддерживает .NET 10) |
+| Есть | пользователи с мастер-паролями, вход по PIN, записи с разделами и папками, поиск, избранное, корзина, коды 2FA (TOTP), генератор паролей, автоввод, импорт (PKX, KDBX, CSV, JSON, 1PUX) и экспорт (PKX, KDBX, CSV), очистка буфера обмена, автоблокировка, значок в трее (строке меню), светлая и тёмная тема, русский и английский |
+| Автоввод | горячая клавиша (Ctrl+Alt+A, на macOS ⌃⌥A, меняется в настройках) в любом окне находит запись по заголовку окна или программе либо показывает список и вводит логин, Tab, пароль и — при «Входить автоматически» — Enter; или собственный порядок ввода записи. Если за это время на передний план вышло другое окно, ничего не вводится. Кнопка «Автоввод» в записи вводит данные в окно под PassKeeper |
+| Нужно | macOS: разрешить PassKeeper в «Системные настройки → Конфиденциальность и безопасность → Универсальный доступ» (для автоввода). Linux: сеанс X11 или окна X11-программ под Wayland и libXtst (автоввод); GNOME Keyring или KWallet (PIN) |
+| PIN | 4–12 цифр; файл PIN запечатан ключом из Связки ключей (macOS) или Secret Service (Linux), поэтому его копия на другом компьютере бесполезна; после 5 ошибок PIN сбрасывается |
+| Пока нет | подсказок у полей входа, заполнения формы входа при её открытии, автовхода в VPN‑клиенты, импорта напрямую из браузеров |
+| Запуск | `--minimized` — сразу в трей (строку меню); в Linux закрытие окна в трей по умолчанию выключено (GNOME показывает значки в трее только с расширением) |
+| Данные | macOS `~/Library/Application Support/PassKeeper`, Linux `~/.local/share/PassKeeper`, доступны только владельцу; другая папка — `--data <папка>` |
+| Состояние | тот же код проверен на Windows; на самих macOS и Linux сборки ещё не запускались |
+
+Перенос записей: на одном компьютере Экспорт → PassKeeper (.pkx), на другом — Импорт этого файла. Работает между Windows, macOS и Linux в любую сторону.
+
+macOS: распакуйте архив и перенесите PassKeeper.app в «Программы». Приложение не подписано сертификатом разработчика Apple, поэтому первый запуск macOS блокирует: откройте его через контекстное меню → «Открыть», разрешите в «Системные настройки → Конфиденциальность и безопасность → Всё равно открыть» или выполните
+
+```sh
+xattr -dr com.apple.quarantine /Applications/PassKeeper.app
+```
+
+Linux:
+
+```sh
+tar -xzf PassKeeper-1.6.0-linux-x64.tar.gz
+./PassKeeper-1.6.0/install.sh
+```
+
+`install.sh` копирует приложение в `~/.local/opt/PassKeeper` и добавляет его в меню приложений, права root не нужны; `./PassKeeper-1.6.0/PassKeeper` запускает его на месте.
+
 ### Сборка
 
 Нужен .NET 10 SDK; для томов 7z — 7-Zip (необязательно).
@@ -275,13 +343,15 @@ PassKeeper-Setup-1.5.4.exe /S /allusers /desktop /autostart
 powershell -ExecutionPolicy Bypass -File .\build.ps1
 ```
 
-Результат в `dist\<версия>\`: установщик, портативный zip, `SHA256SUMS.txt`, тома `7z\`. Тесты: `dotnet test tests/PassKeeper.Tests`.
+Результат в `dist\<версия>\`: установщик, портативный zip, `SHA256SUMS.txt`, тома `7z\`. Затем `build-desktop.ps1` добавляет пакеты для macOS и Linux (они тоже собираются на Windows). Тесты: `dotnet test tests/PassKeeper.Tests`.
 
 | Путь | Содержимое |
 |---|---|
 | `src/PassKeeper.Core` | криптография, хранилище, PIN, импорт/экспорт, KDBX, TOTP, сопоставление, распознавание полей, каталог клиентов |
 | `src/PassKeeper` | приложение WPF |
 | `src/PassKeeper.Setup` | установщик и деинсталлятор (.NET Framework 4.8) |
+| `src/PassKeeper.Desktop` | приложение для macOS и Linux (Avalonia) |
+| `tools/Packager` | пакеты для macOS (.app) и Linux с правами файлов Unix |
 | `tests/PassKeeper.Tests` | модульные тесты |
 | `tests/e2e` | сквозные проверки: тестовые профили, тестовый клиент входа, локальные страницы входа (Windows, UI Automation) |
 | `docs/manual.*.md` | руководство пользователя (встроено в программу как справка) |

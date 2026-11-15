@@ -7,9 +7,9 @@ namespace PassKeeper.Core.Storage;
 
 /// <summary>
 /// PIN quick-unlock data. The vault key is wrapped with Argon2id(PIN) and the whole record is additionally
-/// sealed with Windows DPAPI (current user), so a copied pin file cannot be brute-forced on another
-/// machine/account. After <see cref="VaultService.MaxPinAttempts"/> failures the file is destroyed and the
-/// master password becomes mandatory.
+/// sealed to the user on this computer (<see cref="PinSealing"/>: DPAPI on Windows, the system's secret store on
+/// macOS and Linux), so a copied pin file cannot be brute-forced on another machine/account. After
+/// <see cref="VaultService.MaxPinAttempts"/> failures the file is destroyed and the master password becomes mandatory.
 /// </summary>
 internal sealed class PinRecord
 {
@@ -22,12 +22,10 @@ internal sealed class PinRecord
 
 internal static class PinStore
 {
-    private static readonly byte[] Entropy = "PassKeeper.PinStore.v1"u8.ToArray();
-
     public static PinRecord Load(string path)
     {
         var sealedBytes = File.ReadAllBytes(path);
-        var json = ProtectedData.Unprotect(sealedBytes, Entropy, DataProtectionScope.CurrentUser);
+        var json = PinSealing.Current.Open(path, sealedBytes);
         try
         {
             return JsonSerializer.Deserialize<PinRecord>(json, VaultJson.Options)
@@ -44,7 +42,7 @@ internal static class PinStore
         var json = JsonSerializer.SerializeToUtf8Bytes(record, VaultJson.Options);
         try
         {
-            var sealedBytes = ProtectedData.Protect(json, Entropy, DataProtectionScope.CurrentUser);
+            var sealedBytes = PinSealing.Current.Seal(path, json);
             FileUtil.WriteAtomic(path, sealedBytes);
         }
         finally
@@ -55,6 +53,11 @@ internal static class PinStore
 
     public static void Delete(string path)
     {
+        try
+        {
+            PinSealing.Current.Forget(path);
+        }
+        catch (Exception ex) when (ex is PinSealUnavailableException or CryptographicException) { }
         try
         {
             if (!File.Exists(path)) return;

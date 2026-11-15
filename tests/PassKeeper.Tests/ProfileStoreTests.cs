@@ -2,6 +2,7 @@ using PassKeeper.Core.Storage;
 
 namespace PassKeeper.Tests;
 
+[Collection("Pin")]
 public class ProfileStoreTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "pk-profiles-" + Guid.NewGuid().ToString("N"));

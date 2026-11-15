@@ -1,7 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <!-- Shared by the Windows app and the macOS / Linux app. The few Windows-only parts (DPAPI for the PIN and Chromium
+         passwords, the Windows credential store) are only called on Windows. -->
+    <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>PassKeeper.Core</RootNamespace>
   </PropertyGroup>
 
