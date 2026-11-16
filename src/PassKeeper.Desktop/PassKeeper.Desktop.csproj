@@ -8,6 +8,7 @@
     <AssemblyName>PassKeeper</AssemblyName>
     <RootNamespace>PassKeeper.Desktop</RootNamespace>
     <BuiltInComInteropSupport>false</BuiltInComInteropSupport>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
 

@@ -119,18 +119,20 @@ public sealed class MainWindow : Window
         lockItem.Click += (_, _) => ShowSignIn();
         var quit = new NativeMenuItem(Loc.T("Tray.Quit"));
         quit.Click += (_, _) => Quit();
-        var menu = new NativeMenu();
+        // Avalonia's macOS exporter binds to the first NativeMenu instance. Set it before attaching
+        // the icon and keep that instance when changing language; replacing it crashes the app.
+        var menu = _tray?.Menu ?? new NativeMenu();
+        menu.Items.Clear();
         menu.Items.Add(open);
         menu.Items.Add(lockItem);
         menu.Items.Add(new NativeMenuItemSeparator());
         menu.Items.Add(quit);
         if (_tray == null)
         {
-            _tray = new TrayIcon { Icon = Ui.Icon, ToolTipText = "PassKeeper" };
+            _tray = new TrayIcon { Icon = Ui.Icon, ToolTipText = "PassKeeper", Menu = menu };
             _tray.Clicked += (_, _) => ShowFromTray();
             TrayIcon.SetIcons(App.Instance, [_tray]);
         }
-        _tray.Menu = menu;
         UpdateTray();
     }
 

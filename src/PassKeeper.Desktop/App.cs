@@ -45,6 +45,8 @@ public sealed class App : Application
             // The application ends by Quit (tray menu, or closing the window when it does not stay in the tray).
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
             var window = new MainWindow();
+            if (Program.SmokeTestOutput is { } output)
+                window.Opened += async (_, _) => await DesktopSmokeTest.RunAsync(window, desktop, output);
             if (!(Program.StartMinimized && Settings.CloseToTray)) desktop.MainWindow = window;
         }
         base.OnFrameworkInitializationCompleted();
