@@ -256,7 +256,14 @@ public sealed class VaultView : UserControl
     {
         if (string.IsNullOrEmpty(value)) return;
         var row = new Grid { ColumnDefinitions = new ColumnDefinitions("160,*,Auto"), Margin = new Thickness(0, 4) };
-        var shown = new SelectableTextBlock { Text = secret ? new string('•', Math.Min(value.Length, 16)) : value, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
+        // A mask stays on one line (it is not text to read); the value itself wraps once shown.
+        var shown = new SelectableTextBlock
+        {
+            Text = secret ? new string('•', Math.Min(value.Length, 16)) : value,
+            TextWrapping = secret ? TextWrapping.NoWrap : TextWrapping.Wrap,
+            TextTrimming = secret ? TextTrimming.CharacterEllipsis : TextTrimming.None,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
         if (secret) shown.FontFamily = new FontFamily("Menlo, Consolas, DejaVu Sans Mono, monospace");
         var buttons = Ui.Row();
         if (secret)
@@ -266,6 +273,8 @@ public sealed class VaultView : UserControl
             {
                 var hidden = shown.Text != value;
                 shown.Text = hidden ? value : new string('•', Math.Min(value.Length, 16));
+                shown.TextWrapping = hidden ? TextWrapping.Wrap : TextWrapping.NoWrap;
+                shown.TextTrimming = hidden ? TextTrimming.None : TextTrimming.CharacterEllipsis;
                 reveal.Content = Loc.T(hidden ? "Common.Hide" : "Common.Show");
             };
             buttons.Children.Add(reveal);

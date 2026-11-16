@@ -95,7 +95,7 @@ Chrome 127+ protects newly saved passwords with App-Bound Encryption, which thir
 ### Installation
 
 ```bat
-PassKeeper-Setup-1.6.0.exe
+PassKeeper-Setup-1.6.1.exe
 ```
 
 | Mode | Location | Rights |
@@ -109,7 +109,7 @@ The autostart and language chosen in the installer are used on the first run.
 Silent install: `/S`, `/allusers` or `/currentuser`, `/desktop`, `/autostart` or `/noautostart`, `/nolaunch`, `"/dir=path"`, `/lang=en|ru`. Exit codes: 0 ok, 1 error, 740 elevation required, 1602 cancelled.
 
 ```bat
-PassKeeper-Setup-1.6.0.exe /S /allusers /desktop /autostart
+PassKeeper-Setup-1.6.1.exe /S /allusers /desktop /autostart
 ```
 
 ### Uninstall
@@ -147,11 +147,11 @@ xattr -dr com.apple.quarantine /Applications/PassKeeper.app
 Linux:
 
 ```sh
-tar -xzf PassKeeper-1.6.0-linux-x64.tar.gz
-./PassKeeper-1.6.0/install.sh
+tar -xzf PassKeeper-1.6.1-linux-x64.tar.gz
+./PassKeeper-1.6.1/install.sh
 ```
 
-`install.sh` copies the app to `~/.local/opt/PassKeeper` and adds it to the applications menu, no root rights needed; `./PassKeeper-1.6.0/PassKeeper` runs it in place.
+`install.sh` copies the app to `~/.local/opt/PassKeeper` and adds it to the applications menu, no root rights needed; `./PassKeeper-1.6.1/PassKeeper` runs it in place.
 
 ### Build
 
@@ -304,7 +304,7 @@ Chrome 127+ шифрует новые пароли App-Bound Encryption, нед�
 ### Установка
 
 ```bat
-PassKeeper-Setup-1.6.0.exe
+PassKeeper-Setup-1.6.1.exe
 ```
 
 | Режим | Папка | Права |
@@ -318,7 +318,7 @@ PassKeeper-Setup-1.6.0.exe
 Тихая установка: `/S`, `/allusers` или `/currentuser`, `/desktop`, `/autostart` или `/noautostart`, `/nolaunch`, `"/dir=путь"`, `/lang=ru|en`. Коды возврата: 0 — успех, 1 — ошибка, 740 — нужны права администратора, 1602 — отменено.
 
 ```bat
-PassKeeper-Setup-1.6.0.exe /S /allusers /desktop /autostart
+PassKeeper-Setup-1.6.1.exe /S /allusers /desktop /autostart
 ```
 
 ### Удаление
@@ -356,11 +356,11 @@ xattr -dr com.apple.quarantine /Applications/PassKeeper.app
 Linux:
 
 ```sh
-tar -xzf PassKeeper-1.6.0-linux-x64.tar.gz
-./PassKeeper-1.6.0/install.sh
+tar -xzf PassKeeper-1.6.1-linux-x64.tar.gz
+./PassKeeper-1.6.1/install.sh
 ```
 
-`install.sh` копирует приложение в `~/.local/opt/PassKeeper` и добавляет его в меню приложений, права root не нужны; `./PassKeeper-1.6.0/PassKeeper` запускает его на месте.
+`install.sh` копирует приложение в `~/.local/opt/PassKeeper` и добавляет его в меню приложений, права root не нужны; `./PassKeeper-1.6.1/PassKeeper` запускает его на месте.
 
 ### Сборка
 
